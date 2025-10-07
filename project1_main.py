@@ -1,0 +1,248 @@
+import sys
+from pathlib import Path
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QHBoxLayout,
+    QVBoxLayout, QScrollArea, QPushButton, QLabel,
+    QTabWidget, QTextEdit
+)
+from PySide6.QtWidgets import QMenu
+from PySide6.QtWidgets import QLineEdit
+from PySide6.QtCore import Qt
+from project1_main_tab.load_data import CsvCleanerWidget  # nếu bạn lưu widget trên ở file csv_cleaner_widget.py
+from project1_main_tab.plot_tab import PlotTab
+from matplotlib.backends.backend_qt5 import NavigationToolbar2QT as NavigationToolbar
+from project1_main_tab.drift_tab import DriftMonitorTab
+from project1_main_tab.predict_tab import PredictTab
+from project1_main_tab.analysis_report_tab import AnalysisReportTab
+from project1_main_tab.plotly_tab import PlotlyTab
+
+
+def app_dir():
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent
+    return Path(__file__).resolve().parent
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Preview and analyze DataFrames")
+        self.setGeometry(100, 100, 1000, 600)
+
+        # === Layout chính
+        main_widget = QWidget()
+        main_layout = QHBoxLayout(main_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        self.setCentralWidget(main_widget)
+
+        # === Scroll Area bên trái
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFixedWidth(180)
+        self.scroll_content = QWidget()
+        self.scroll_layout = QVBoxLayout(self.scroll_content)
+        self.scroll_content.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.scroll_content.customContextMenuRequested.connect(self.show_folder_context_menu)
+
+        self.scroll_content.setStyleSheet("background: #afcbff;")   # Hồng nhạt pastel, hoặc màu bạn muốn #afcbff: xanh nhạt pastel, #fbd6e3 #e8bddb Hồng nhạt pastel
+
+        # ===== Thêm ô tìm kiếm folder
+        self.search_box = QLineEdit()
+        self.search_box.setPlaceholderText("🔍 Tìm folder...")
+        self.search_box.setClearButtonEnabled(True)
+        self.search_box.setStyleSheet("""
+            QLineEdit {
+    background-color: #1a1c29;        /* Nền block đen sang trọng */
+    color: #e0e3f0;                   /* Màu chữ trắng xanh AI */
+    border: 1px solid #2a2e45;        /* Viền trung tính hiện đại */
+    border-radius: 5px;
+    padding-left: 10px;
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+QLineEdit:hover {
+    border: 1.2px solid #00bcd4;      /* Hover sáng nhẹ cyan */
+}
+QLineEdit:focus {
+    border: 1.5px solid #8c5eff;      /* Khi focus: ánh tím hiện đại */
+    background-color: #0f111a;        /* Tối hơn tạo chiều sâu */
+}
+
+        """)
+        self.search_box.textChanged.connect(self.on_search_folder)
+        self.scroll_layout.addWidget(self.search_box)
+        self.btn_load_data = QPushButton("📂 Load Data")
+        self.btn_load_data.setFixedHeight(36)
+        self.btn_load_data.setStyleSheet("""
+            QPushButton {
+    background-color: #1a1c29;         /* Nền block tối sang trọng */
+    color: #00bcd4;                    /* Chữ xanh cyan nổi bật */
+    border: 1px solid #2a2e45;         /* Viền tinh tế */
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 13px;
+    margin-bottom: 10px;
+    padding: px 20px;
+    min-height: 17px;
+
+                                         
+}
+QPushButton:hover {
+    background-color: #1d2b4f;         /* Hover chuyển navy ánh tím */
+    color: #8c5eff;                    /* Chữ tím ánh điện */
+    border: 1px solid #8c5eff;         /* Viền tím nhấn mạnh */
+}
+QPushButton:pressed {
+    background-color: #8c5eff;
+    color: #0f111a;
+    border: 1px solid #00bcd4;
+}
+
+        """)
+        self.btn_load_data.clicked.connect(self.load_data_clicked)
+        self.scroll_layout.addWidget(self.btn_load_data)
+        self.load_folders()
+        self.scroll_area.setWidget(self.scroll_content)
+
+
+        # === Tab Widget bên phải
+        self.tab_widget = QTabWidget()
+        self.add_tabs()
+
+        # === Ghép layout
+        main_layout.addWidget(self.scroll_area, 1)
+        main_layout.addWidget(self.tab_widget, 2)
+        self.final_df = None
+
+    def show_folder_context_menu(self, pos):
+        global_pos = self.scroll_content.mapToGlobal(pos)
+        menu = QMenu()
+        refresh_action = menu.addAction("🔄 Refresh")
+        action = menu.exec(global_pos)
+        if action == refresh_action:
+            # Giữ lại text search hiện tại (nếu có)
+            filter_text = self.search_box.text()
+            self.load_folders(filter_text)
+    def set_final_df(self, df, folder_name="MergedData"): # truyền dữ liệu đến các hàm chức năng khác
+        if not hasattr(self, "dataframes"):
+            self.dataframes = {}
+        self.dataframes[folder_name] = df
+        self.final_df = df
+        self.current_folder_name = folder_name
+        if hasattr(self, "tab2"):
+            self.tab2.update_variables(df)
+        if hasattr(self, "drift_tab"):
+            self.drift_tab.update_variables(df)
+        if hasattr(self, "predict_tab"):
+            self.predict_tab.update_variables(df)
+        if hasattr(self, "analysis_report_tab"):
+            self.analysis_report_tab.set_dataframe(df)
+        if hasattr(self, "plotly_tab"):
+            self.plotly_tab.update_plot(df)
+
+
+
+
+    def get_df_list(self):
+        if hasattr(self, "dataframes"):
+            return [f"{k} (rows: {len(v)})" for k, v in self.dataframes.items()]
+        return []
+
+    def get_df_by_name(self, name: str):
+        # name là tên folder hoặc "MergedData"
+        if hasattr(self, "dataframes") and name in self.dataframes:
+            return self.dataframes[name]
+        if name.startswith("MergedData"):
+            return self.final_df
+        return None
+
+
+
+    def load_data_clicked(self):
+        if hasattr(self, "csv_cleaner_widget"):
+            self.csv_cleaner_widget.select_and_process_files_from_filelist()
+            self.tab_widget.setCurrentIndex(0)
+
+    def on_search_folder(self, text):
+        self.load_folders(filter_text=text)
+
+    def load_folders(self, filter_text=""):
+        # Xóa các widget cũ (trừ ô tìm kiếm)
+        for i in reversed(range(2, self.scroll_layout.count())):
+            widget = self.scroll_layout.itemAt(i).widget()
+            if widget:
+                widget.setParent(None)
+            else:
+                item = self.scroll_layout.itemAt(i)
+                self.scroll_layout.removeItem(item)  # Xóa stretch cũ nếu có
+
+        base_path = app_dir()
+        matched_count = 0
+        for folder in sorted(base_path.iterdir()):
+            if folder.is_dir() and not folder.name.startswith('.'):
+                if filter_text.lower() not in folder.name.lower():
+                    continue
+                btn = QPushButton(f"{folder.name}")
+                btn.setCursor(Qt.PointingHandCursor)
+                btn.setStyleSheet("""
+    QPushButton {
+        text-align: left;
+        padding-left: 12px;
+        background-color: transparent;
+        color: #000000;
+        font-weight: bold;
+        border: none;
+        border-radius: 5px;
+        margin-bottom: 4px;
+    }
+    QPushButton:hover {
+        background-color: #cce5ff;
+        color: #004a99;
+    }
+    """)
+                btn.clicked.connect(lambda _, name=folder.name: self.open_folder(name))
+                self.scroll_layout.addWidget(btn)
+                matched_count += 1
+        # Chỉ addStretch nếu có hơn 0 folder (tránh lề dưới)
+        if matched_count > 0:
+            self.scroll_layout.addStretch()
+
+
+    def open_folder(self, folder_name):
+        folder_path = app_dir() / folder_name
+        if hasattr(self, "csv_cleaner_widget"):
+            self.csv_cleaner_widget._external_folder = str(folder_path)
+            self.csv_cleaner_widget.select_and_process_files()
+            self.tab_widget.setCurrentIndex(0)
+
+    def add_tabs(self):
+        tab1 = QWidget()
+        layout1 = QVBoxLayout(tab1)
+        layout1.setContentsMargins(0, 0, 0, 0)
+        layout1.setSpacing(0)
+
+        self.csv_cleaner_widget = CsvCleanerWidget(parent_main_window=self)
+        layout1.addWidget(self.csv_cleaner_widget)
+        self.tab_widget.addTab(tab1, "🏠 Home")
+
+        # Tab 2 - Plot
+        self.tab2 = PlotTab(parent=self)
+        self.tab_widget.addTab(self.tab2, "📈 Plot")
+        # Tab 6 - Plotly
+        self.plotly_tab = PlotlyTab(parent=self)
+        self.tab_widget.addTab(self.plotly_tab, "🌐 Plotly")
+
+        # Tab 3 - Drift Monitor
+        self.drift_tab = DriftMonitorTab(parent=self)
+        self.tab_widget.addTab(self.drift_tab, "🔄 Drift Monitor")
+        # Tab 4 - Predict   
+        self.predict_tab = PredictTab(parent=self)
+        self.tab_widget.addTab(self.predict_tab, "🔮 Predict")
+        # Tab 5 - Analysis Report
+        self.analysis_report_tab = AnalysisReportTab(parent=self)
+        self.tab_widget.addTab(self.analysis_report_tab, "📊 Analysis Report")
+
+
+
+
+

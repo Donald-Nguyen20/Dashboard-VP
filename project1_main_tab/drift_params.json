@@ -1,0 +1,29 @@
+{
+  "AH O/L FG PRS": {
+    "high": {
+      "baseline": -0.38,
+      "k": -0.01,
+      "h": -0.1,
+      "lambda": 0.2,
+      "L": 3.0
+    }
+  },
+  "AH O/L PA TEMP": {
+    "high": {
+      "baseline": 310.0,
+      "k": 1.0,
+      "h": 40.0,
+      "lambda": 0.2,
+      "L": 3.0
+    }
+  },
+  "DP_AH": {
+    "high": {
+      "baseline": -0.38,
+      "k": -0.01,
+      "h": -0.1,
+      "lambda": 0.2,
+      "L": 3.0
+    }
+  }
+}

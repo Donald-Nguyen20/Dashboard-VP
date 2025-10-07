@@ -1,0 +1,22 @@
+pyinstaller --onefile .\main.py --icon=DFA.ico `
+  --exclude-module PyQt5 `
+  --exclude-module torch --exclude-module torchvision --exclude-module torchaudio `
+  --exclude-module tensorflow --exclude-module keras --exclude-module jax `
+  --exclude-module spacy --exclude-module thinc --exclude-module langcodes `
+  --exclude-module numba --exclude-module llvmlite --exclude-module sympy `
+  --exclude-module nltk --exclude-module transformers `
+  --exclude-module librosa --exclude-module soundfile `
+  --exclude-module pyarrow --exclude-module fsspec `
+  --exclude-module OpenGL --exclude-module pygame `
+  --exclude-module IPython --exclude-module notebook --exclude-module nbformat --exclude-module nbconvert --exclude-module jupyterlab `
+  --exclude-module faiss_cpu --exclude-module rapidfuzz `
+  --exclude-module tests --exclude-module *.tests --exclude-module matplotlib.tests
+
+
+
+
+
+cập nhật predict theo khoảng thời gian
+cập nhật màu sắc theo win 11 + chức năng analysis report
+phân loại 2 mốc tải và tháng 
+tạo thư viện mới plotly
