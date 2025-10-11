@@ -1,0 +1,94 @@
+/* ================== BASE (không ép trắng toàn app) ================== */
+* { color: #111; font-size: 13px; }
+
+/* Viewport/scroll trong tab ML */
+QScrollArea#mlScroll > QWidget#mlViewport { 
+  background: #2759bd; 
+  border: 2px dashed magenta;   /* chỉ để debug, xong thì bỏ */
+}
+#mlScroll    { background: transparent; border: none; }
+#mlContainer { background: transparent; }
+
+
+/* ================== STEP CARD ================== */
+/* Hỗ trợ cả 2 tên objectName: "StepCard" và "stepCard" */
+#StepCard, #stepCard {
+  background: #0f2d6b;                    /* nền mặc định (đổi #ffffff nếu muốn) */
+  border: 1px solid rgba(0,0,0,0.10);
+  border-radius: 16px;
+  color: #111;                             /* chữ trong card = đen */
+}
+#StepCard:hover, #stepCard:hover { border-color: rgba(0,0,0,0.25); }
+
+/* Typography (ép đen toàn bộ text trong card) */
+#StepCard QLabel, #stepCard QLabel                     { color: #111; }
+#StepCard #badge, #stepCard #badge                     { font-size: 12pt; font-weight: 700; padding: 5px 10px; border-radius: 999px; color: #111; }
+#StepCard #title, #stepCard #title                     { font-size: 16pt; font-weight: 800; color: #111; }
+#StepCard #subtitle, #stepCard #subtitle               { font-size: 10.5pt; color: #111; }
+
+/* ================== PALETTE THEO STEP (giống bản cũ) ================== */
+/* Lưu ý: các rule variant này sẽ ghi đè nền mặc định ở trên. */
+#StepCard[variant="step1"], #stepCard[variant="step1"] { background: #f4ffce; }
+#StepCard[variant="step1"] #badge, #stepCard[variant="step1"] #badge { background: #e7ff86; }
+
+#StepCard[variant="step2"], #stepCard[variant="step2"] { background: #ffe8c9; }
+#StepCard[variant="step2"] #badge, #stepCard[variant="step2"] #badge { background: #ffbf69; }
+
+#StepCard[variant="step3"], #stepCard[variant="step3"] { background: #ffe2de; }
+#StepCard[variant="step3"] #badge, #stepCard[variant="step3"] #badge { background: #ff8f86; }
+
+#StepCard[variant="step4"], #stepCard[variant="step4"] { background: #f2e7ff; }
+#StepCard[variant="step4"] #badge, #stepCard[variant="step4"] #badge { background: #bfa5ff; }
+
+#StepCard[variant="step5"], #stepCard[variant="step5"] { background: #eaf3ff; }
+#StepCard[variant="step5"] #badge, #stepCard[variant="step5"] #badge { background: #8fb8ff; }
+
+#StepCard[variant="step6"], #stepCard[variant="step6"] { background: #e6fff5; }
+#StepCard[variant="step6"] #badge, #stepCard[variant="step6"] #badge { background: #7fe8c4; }
+
+#StepCard[variant="step7"], #stepCard[variant="step7"] { background: #fff8cc; }
+#StepCard[variant="step7"] #badge, #stepCard[variant="step7"] #badge { background: #ffe466; }
+
+/* ================== TRẠNG THÁI (viền, không đổi nền) ================== */
+#StepCard[state="busy"],  #stepCard[state="busy"]  { border-color: #38bdf8; }
+#StepCard[state="done"],  #stepCard[state="done"]  { border-color: #16a34a; }
+#StepCard[state="error"], #stepCard[state="error"] { border-color: #ef4444; }
+
+/* ================== (TÙY CHỌN) ÉP MỘT MÀU CHUNG CHO NỀN CARD ================== */
+/* Nếu muốn bỏ pastel, bật block dưới và để Ở CUỐI FILE:
+#StepCard, #stepCard,
+#StepCard[variant], #stepCard[variant] { background: #2b59b6; }   /\* ví dụ xanh *\/
+*/
+/* --- NỀN CỦA MAINWINDOW + PANE TAB + TRANG TAB --- */
+QMainWindow { background: #c7dafc; }                 /* pastel xanh dương sáng */
+QTabWidget::pane { background: transparent; border: none; }
+#MLApplicationTab { background: #c7dafc; }           /* chính là QWidget trang tab */
+
+/* --- VIEWPORT (chính chứa StepCard) --- */
+QScrollArea#mlScroll > QWidget#mlViewport {
+  background: #c7dafc;                               /* nền sáng dịu cho khu vực step card */
+  /* border: 2px dashed magenta;  // bật tạm nếu cần debug */
+}
+
+/* --- SCROLL + CONTAINER BÊN TRONG --- */
+#mlScroll    { background: #c7dafc; border: none; }   /* cùng màu nền để liền mạch */
+#mlContainer { background: transparent; }
+
+/* --- SCROLLBAR (đồng bộ pastel) --- */
+QScrollBar:horizontal, QScrollBar:vertical {
+  background: #c7dafc;          /* nền track của thanh cuộn */
+  border: none;
+  height: 10px;                 /* thanh ngang */
+  width: 10px;                  /* thanh dọc */
+  margin: 0px;
+}
+
+QScrollBar::handle:horizontal, QScrollBar::handle:vertical {
+  background: #a9c7ff;          /* màu tay kéo (đậm hơn nền 1 tông) */
+  border-radius: 5px;
+}
+
+QScrollBar::handle:hover {
+  background: #7ea9ff;          /* hover sáng hơn chút */
+}
+

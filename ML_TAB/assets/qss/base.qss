@@ -1,0 +1,19 @@
+/* assets/qss/window_base.qss */
+
+/* Nền window và vùng tabpane */
+#MLDashboardWindow { background: #f5f7fb; }
+#MLDashboardWindow QTabWidget::pane { border: 0; background: #f5f7fb; }
+
+/* TabBar nhẹ nhàng */
+#MLDashboardWindow QTabBar::tab {
+  padding: 8px 14px;
+  border-radius: 8px;
+}
+#MLDashboardWindow QTabBar::tab:selected {
+  background: #e8eef7;
+}
+
+/* Viewport & container của ML tab (nếu tab dùng id này) */
+#MLDashboardWindow #mlViewport  { background: #f5f7fb; }
+#MLDashboardWindow #mlScroll    { background: transparent; border: none; }
+#MLDashboardWindow #mlContainer { background: transparent; }

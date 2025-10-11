@@ -5,7 +5,10 @@ import os
 from pathlib import Path
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget, QPushButton
 from project1_main import MainWindow
-from project2_main import SystemMonitoringWindow
+# from windows.ML_tab import ML_Tab
+from ML_TAB.windows.ML_tab import ML_Tab
+
+
 
 
 def app_dir():
@@ -236,9 +239,14 @@ class MasterWindow(QMainWindow):
         main_window = MainWindow()
         widget = main_window.centralWidget()
         self.tab_widget.addTab(widget, "📊 Data Analyzing")
-        system_window = SystemMonitoringWindow()
-        sys_widget = system_window.centralWidget()
-        self.tab_widget.addTab(sys_widget, "🛠 System Monitoring")
+
+        # Tab 2: ML Application (từ windows/ML_tab.py)
+        ml_win = ML_Tab()                            # tạo QMainWindow tạm
+        ml_widget = ml_win.centralWidget()           # lấy QWidget bên trong để nhúng
+        # ✅ rất quan trọng: copy stylesheet từ ML_Tab sang widget con đã nhúng
+        ml_widget.setStyleSheet(ml_win.styleSheet())
+        self.tab_widget.addTab(ml_widget, "🤖 ML Application")
+
 
 
 

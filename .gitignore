@@ -1,0 +1,44 @@
+# =============== PYTHON / QT PROJECT ===============
+
+# Byte-compiled / cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build / Distribution folders
+build/
+dist/
+*.spec
+
+# Virtual environment
+venv/
+.env/
+.venv/
+
+# IDE / Editor folders
+.vscode/
+.idea/
+
+# Temporary data
+*.db
+*.csv
+*.xlsx
+*.log
+*.bak
+*.tmp
+
+# PyInstaller outputs
+*.exe
+
+# Models
+*.pkl
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Ignore test/output folders
+output/
+test/
+temp/
