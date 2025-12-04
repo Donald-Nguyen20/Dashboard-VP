@@ -7,14 +7,33 @@ from PySide6.QtCore import QAbstractTableModel, Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 
-class CsvCleanerWidget(QWidget): #load, xử lý và gộp dữ liệu từ nhiều thư mục con, mỗi thư mục chứa các file .csv, .xlsx, .xlsm, .xlsb
+class CsvCleanerWidget(QWidget):
     def __init__(self, parent_main_window=None):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         self.parent_main_window = parent_main_window
-        
+
+    def _get_date_parse_params(self):
+        """
+        Lấy dayfirst và fmt từ combobox Date format ở MainWindow.
+        Default: dd/MM/yyyy HH:MM:SS (VN).
+        """
+        dayfirst = True
+        fmt = "%d/%m/%Y %H:%M:%S"
+
+        pmw = self.parent_main_window
+        if pmw is not None and hasattr(pmw, "cb_date_format"):
+            cb = pmw.cb_date_format
+            idx = cb.currentIndex()
+            data = cb.itemData(idx)
+            if isinstance(data, dict):
+                dayfirst = data.get("dayfirst", dayfirst)
+                fmt = data.get("fmt", fmt)
+
+        return dayfirst, fmt
+
     def select_and_process_files_from_filelist(self):
         from PySide6.QtWidgets import QFileDialog, QMessageBox
         file_paths, _ = QFileDialog.getOpenFileNames(
@@ -47,15 +66,20 @@ class CsvCleanerWidget(QWidget): #load, xử lý và gộp dữ liệu từ nhi�
             merged_df = pd.merge(merged_df, df, on=["Date", "Time"], how="outer")
 
         # Xử lý cột Datetime
+                # Xử lý cột Datetime
         if 'Datetime' in merged_df.columns:
             merged_df['Datetime'] = pd.to_datetime(merged_df['Datetime'], errors='coerce')
         else:
+            # Lấy dayfirst & format từ combobox Date format
+            dayfirst, fmt = self._get_date_parse_params()
+
             merged_df['Datetime'] = pd.to_datetime(
                 merged_df['Date'].astype(str).str.strip() + ' ' + merged_df['Time'].astype(str).str.strip(),
-                dayfirst=True,
-                format='%d/%m/%Y %H:%M:%S',
+                dayfirst=dayfirst,
+                format=fmt,
                 errors='coerce'
             )
+
         merged_df = merged_df.sort_values(by='Datetime')
         cols = ['Datetime'] + [col for col in merged_df.columns if col not in ['Date', 'Time', 'Datetime']]
         merged_df = merged_df[cols]
@@ -215,12 +239,16 @@ class CsvCleanerWidget(QWidget): #load, xử lý và gộp dữ liệu từ nhi�
                         merged_df = pd.merge(merged_df, df, on=["Date", "Time"], how="outer")
 
                     if 'Datetime' not in merged_df.columns:
+                        # Lấy dayfirst & format từ combobox Date format
+                        dayfirst, fmt = self._get_date_parse_params()
+
                         merged_df['Datetime'] = pd.to_datetime(
                             merged_df['Date'].astype(str).str.strip() + ' ' + merged_df['Time'].astype(str).str.strip(),
-                            dayfirst=True,
-                            format='%d/%m/%Y %H:%M:%S',
+                            dayfirst=dayfirst,
+                            format=fmt,
                             errors='coerce'
                         )
+
 
                     # 🏷️ Gắn cột SourceFolder riêng biệt để tránh trùng
                     merged_df["__SourceFolder__"] = subfolder.name

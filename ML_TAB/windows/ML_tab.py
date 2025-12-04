@@ -57,16 +57,3 @@ class ML_Tab(QMainWindow):
         # Log ra console để anh dễ kiểm tra
         print(f"✔ Loaded base:  {base_path if os.path.exists(base_path) else 'N/A'}")
         print(f"✔ Loaded theme: {theme_path if os.path.exists(theme_path) else 'N/A'}")
-
-import sys
-from PySide6.QtWidgets import QApplication
-from ML_TAB.windows.ML_tab import ML_Tab
-
-def main():
-    app = QApplication(sys.argv)
-    win = ML_Tab()  # MainWindow sẽ tự nạp base.qss + theme.qss
-    win.show()
-    sys.exit(app.exec())
-
-if __name__ == "__main__":
-    main()

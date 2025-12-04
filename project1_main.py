@@ -15,6 +15,8 @@ from project1_main_tab.drift_tab import DriftMonitorTab
 from project1_main_tab.predict_tab import PredictTab
 from project1_main_tab.analysis_report_tab import AnalysisReportTab
 from project1_main_tab.plotly_tab import PlotlyTab
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QComboBox, QLabel, QHBoxLayout, QWidget, QSizePolicy
 
 
 def app_dir():
@@ -101,6 +103,40 @@ QPushButton:pressed {
         """)
         self.btn_load_data.clicked.connect(self.load_data_clicked)
         self.scroll_layout.addWidget(self.btn_load_data)
+
+        # === Date format combobox - ngay dưới nút Load Data ===
+        date_row = QWidget(self.scroll_content)
+        date_row_layout = QHBoxLayout(date_row)
+        date_row_layout.setContentsMargins(8, 0, 8, 0)
+        date_row_layout.setSpacing(4)
+
+        lbl_date_fmt = QLabel("Format:")
+        lbl_date_fmt.setObjectName("lblDateFormat")
+
+        self.cb_date_format = QComboBox(date_row)
+        self.cb_date_format.setObjectName("cbDateFormat")
+
+        # 🔹 Sửa / thêm 2 item như sau:
+        self.cb_date_format.addItem(
+            "dd/MM/yyyy",    # VN – 24h
+            {"dayfirst": True, "fmt": "%d/%m/%Y %H:%M:%S"}
+        )
+        self.cb_date_format.addItem(
+            "MM/dd/yyyy",   # US – 12h + AM/PM
+            {"dayfirst": False, "fmt": "%m/%d/%Y %I:%M:%S %p"}
+        )
+
+        self.cb_date_format.setCurrentIndex(0)   # mặc định VN
+        self.cb_date_format.setFixedWidth(160)
+
+
+        date_row_layout.addWidget(lbl_date_fmt)
+        date_row_layout.addWidget(self.cb_date_format)
+        date_row_layout.addStretch(1)
+
+        self.scroll_layout.addWidget(date_row, 0, Qt.AlignLeft)
+
+
         self.load_folders()
         self.scroll_area.setWidget(self.scroll_content)
 
@@ -168,7 +204,8 @@ QPushButton:pressed {
 
     def load_folders(self, filter_text=""):
         # Xóa các widget cũ (trừ ô tìm kiếm)
-        for i in reversed(range(2, self.scroll_layout.count())):
+        for i in reversed(range(3, self.scroll_layout.count())):
+
             widget = self.scroll_layout.itemAt(i).widget()
             if widget:
                 widget.setParent(None)
