@@ -91,4 +91,25 @@ QScrollBar::handle:horizontal, QScrollBar::handle:vertical {
 QScrollBar::handle:hover {
   background: #7ea9ff;          /* hover sáng hơn chút */
 }
+/* ========== TABLE CHUNG TOÀN APP – VÀNG NHẸ GIỐNG STEP 1 ========== */
+QTableView,
+QTableWidget {
+  background-color: #f4ffce;          /* nền vàng nhạt như Step 1 */
+  alternate-background-color: #fff8cc;/* vàng nhạt hơn cho hàng xen kẽ */
+  color: #111;
+  gridline-color: #e7ff86;            /* kẻ ô dùng màu badge step1 */
+  border: 1px solid #e7ff86;
+  selection-background-color: #ffe466;/* chọn hàng: vàng đậm hơn 1 tông */
+  selection-color: #111;
+}
+
+QHeaderView::section {
+  background-color: #e7ff86;          /* header dùng màu badge step1 */
+  color: #111;
+  padding: 4px 6px;
+  border: 0;
+  border-right: 1px solid #f4ffce;
+  font-weight: 600;
+}
+
 

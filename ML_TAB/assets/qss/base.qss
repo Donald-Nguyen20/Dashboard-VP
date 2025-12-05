@@ -1,19 +1,68 @@
 /* assets/qss/window_base.qss */
 
 /* Nền window và vùng tabpane */
-#MLDashboardWindow { background: #f5f7fb; }
-#MLDashboardWindow QTabWidget::pane { border: 0; background: #f5f7fb; }
-
-/* TabBar nhẹ nhàng */
-#MLDashboardWindow QTabBar::tab {
-  padding: 8px 14px;
-  border-radius: 8px;
+#MLDashboardWindow { background: #c7dafc; }      /* trả lại xanh cũ */
+#MLDashboardWindow QTabWidget::pane {
+  border: 0;
+  background: #c7dafc;
 }
+
+/* TabBar màu xanh pastel */
+#MLDashboardWindow QTabBar::tab {
+  background: #a9c7ff;
+  color: #111;
+  padding: 8px 14px;
+  border-radius: 8px 8px 0 0;
+  margin-right: 4px;
+  min-width: 90px;
+}
+
 #MLDashboardWindow QTabBar::tab:selected {
-  background: #e8eef7;
+  background: #7ea9ff;
+  font-weight: 600;
+}
+
+#MLDashboardWindow QTabBar::tab:hover {
+  background: #8fb8ff;
 }
 
 /* Viewport & container của ML tab (nếu tab dùng id này) */
 #MLDashboardWindow #mlViewport  { background: #f5f7fb; }
 #MLDashboardWindow #mlScroll    { background: transparent; border: none; }
 #MLDashboardWindow #mlContainer { background: transparent; }
+/* Style chung cho 3 nút con: Detect Outlier, Regression, Classification */
+#btnDetectOutlier,
+#btnRegression,
+#btnClassification {
+  border: 1px solid rgba(0,0,0,0.10);
+  border-radius: 14px;      /* bo giống nút Detect Outlier cũ */
+  font-weight: 700;
+  font-size: 14pt;          /* tăng nhẹ cho cả 3 nút, anh chỉnh 13.5–16 tuỳ ý */
+  padding: 6px 16px;
+  min-height: 42px;
+  min-width: 180px;
+}
+
+/* NỀN RIÊNG CHO TỪNG LOẠI NÚT */
+
+/* Detect Outlier: giữ nguyên màu cũ */
+#btnDetectOutlier {
+  background: #ffe2de;      /* màu nền như trước */
+}
+#btnDetectOutlier:hover {
+  border-color: rgba(0,0,0,0.25);
+  background: #ff8f86;      /* màu hover như trước */
+}
+
+/* Regression & Classification: dùng palette Step 5 */
+#btnRegression,
+#btnClassification {
+  background: #eaf3ff;      /* màu nền giống Step 5 */
+}
+
+#btnRegression:hover,
+#btnClassification:hover {
+  border-color: rgba(0,0,0,0.25);
+  background: #8fb8ff;      /* dùng màu badge Step 5 làm màu hover */
+}
+

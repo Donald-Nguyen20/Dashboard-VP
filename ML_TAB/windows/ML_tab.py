@@ -18,7 +18,7 @@ class ML_Tab(QMainWindow):
         super().__init__()
         self.setWindowTitle("ML Dashboard")
         self.resize(1400, 800)
-
+        self.setObjectName("MLDashboardWindow")
         # Tabs chính
         tabs = QTabWidget(self)
         tabs.setTabPosition(QTabWidget.North)

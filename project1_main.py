@@ -75,6 +75,9 @@ QLineEdit:focus {
         self.scroll_layout.addWidget(self.search_box)
         self.btn_load_data = QPushButton("📂 Load Data")
         self.btn_load_data.setFixedHeight(36)
+        self.search_box.setMaximumWidth(150)
+        self.btn_load_data.setMaximumWidth(150)
+
         self.btn_load_data.setStyleSheet("""
             QPushButton {
     background-color: #1a1c29;         /* Nền block tối sang trọng */
@@ -107,7 +110,7 @@ QPushButton:pressed {
         # === Date format combobox - ngay dưới nút Load Data ===
         date_row = QWidget(self.scroll_content)
         date_row_layout = QHBoxLayout(date_row)
-        date_row_layout.setContentsMargins(8, 0, 8, 0)
+        date_row_layout.setContentsMargins(4, 0, 4, 0)
         date_row_layout.setSpacing(4)
 
         lbl_date_fmt = QLabel("Format:")
@@ -127,7 +130,8 @@ QPushButton:pressed {
         )
 
         self.cb_date_format.setCurrentIndex(0)   # mặc định VN
-        self.cb_date_format.setFixedWidth(160)
+        self.cb_date_format.setFixedWidth(90)
+        date_row.setMaximumWidth(150)  
 
 
         date_row_layout.addWidget(lbl_date_fmt)
@@ -278,8 +282,3 @@ QPushButton:pressed {
         # Tab 5 - Analysis Report
         self.analysis_report_tab = AnalysisReportTab(parent=self)
         self.tab_widget.addTab(self.analysis_report_tab, "📊 Analysis Report")
-
-
-
-
-
