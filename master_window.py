@@ -241,9 +241,8 @@ class MasterWindow(QMainWindow):
         self.tab_widget.addTab(widget, "📊 Data Analyzing")
 
         # Tab 2: ML Application (từ windows/ML_tab.py)
-        ml_win = ML_Tab()                            # tạo QMainWindow tạm
-        ml_widget = ml_win.centralWidget()           # lấy QWidget bên trong để nhúng
-        # ✅ rất quan trọng: copy stylesheet từ ML_Tab sang widget con đã nhúng
+        ml_win = ML_Tab(df_provider=main_window.get_current_df_for_ml)
+        ml_widget = ml_win.centralWidget()
         ml_widget.setStyleSheet(ml_win.styleSheet())
         self.tab_widget.addTab(ml_widget, "🤖 ML Application")
 

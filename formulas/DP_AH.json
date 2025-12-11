@@ -1,0 +1,6 @@
+{
+    "df": "MergedData",
+    "formula_name": "DP_AH",
+    "formula": "`AH O/L FG PRS`-`ECO O/L FG PRS`",
+    "alert_condition": ""
+}

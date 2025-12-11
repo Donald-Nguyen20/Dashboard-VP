@@ -17,6 +17,7 @@ from project1_main_tab.analysis_report_tab import AnalysisReportTab
 from project1_main_tab.plotly_tab import PlotlyTab
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QComboBox, QLabel, QHBoxLayout, QWidget, QSizePolicy
+from ML_TAB.tabs.ml_application_tab import MLApplicationTab
 
 
 def app_dir():
@@ -180,6 +181,12 @@ QPushButton:pressed {
         if hasattr(self, "plotly_tab"):
             self.plotly_tab.update_plot(df)
 
+    def get_current_df_for_ml(self):
+        """
+        Hàm cung cấp DataFrame cho MLApplicationTab.
+        Ở đây dùng final_df (dữ liệu đã xử lý ở Tab1).
+        """
+        return getattr(self, "final_df", None)
 
 
 
@@ -282,3 +289,10 @@ QPushButton:pressed {
         # Tab 5 - Analysis Report
         self.analysis_report_tab = AnalysisReportTab(parent=self)
         self.tab_widget.addTab(self.analysis_report_tab, "📊 Analysis Report")
+                # Tab 7 - ML Steps (Step1–7)
+        self.ml_tab = MLApplicationTab(
+            parent=self,
+            df_provider=self.get_current_df_for_ml  # 👈 lấy final_df từ MainWindow
+        )
+        self.tab_widget.addTab(self.ml_tab, "🤖 ML Steps")
+

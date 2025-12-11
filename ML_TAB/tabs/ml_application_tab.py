@@ -40,10 +40,11 @@ class MLApplicationTab(QWidget):
     Tab ML: bố trí các StepCard theo hàng ngang với QScrollArea (scroll ngang).
     Màu sắc & style lấy từ QSS (ThemeManager), không set inline ở đây.
     """
-    def __init__(self, parent: Optional[QWidget] = None):
+    def __init__(self, parent: Optional[QWidget] = None, df_provider=None):
         super().__init__(parent)
         self.setObjectName("MLApplicationTab")
-
+        # callback để lấy DataFrame từ bên ngoài (MainWindow / Tab1)
+        self.df_provider = df_provider
         # Root + Scroll
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -177,6 +178,35 @@ class MLApplicationTab(QWidget):
         # === STEP 1: Data collection ===
         if step_no == 1:
             try:
+                df = None
+
+                # 1) Thử lấy từ Tab 1 nếu có df_provider
+                if self.df_provider is not None:
+                    df = self.df_provider()
+                    if df is not None and not df.empty:
+                        # ✅ Lấy được dữ liệu từ Tab 1
+                        self.Rawdata   = df.copy()
+                        self.raw_df    = df.copy()
+                        self.cleaned_df = df.copy()
+
+                        head_info = df.head(5).to_string(index=False)
+                        QMessageBox.information(
+                            self,
+                            "Đã lấy dữ liệu từ Tab 1",
+                            f"Shape: {df.shape}\n\n"
+                            f"Preview 5 dòng đầu:\n{head_info}"
+                        )
+                        return
+                    else:
+                        # Tab 1 chưa có dữ liệu → báo nhẹ rồi Fallback sang chọn file
+                        QMessageBox.information(
+                            self,
+                            "Chưa có dữ liệu từ Tab 1",
+                            "Tab 1 hiện chưa có final_df.\n"
+                            "Anh có thể chọn file CSV/Excel thủ công."
+                        )
+
+                # 2) Nếu df vẫn None hoặc rỗng → cho phép chọn file
                 path, _ = QFileDialog.getOpenFileName(
                     self,
                     "Chọn file dữ liệu (CSV/Excel)",
@@ -186,24 +216,26 @@ class MLApplicationTab(QWidget):
                 if not path:
                     return
 
-                # Đọc dữ liệu về DataFrame
-                self.Rawdata = load_rawdata(path)
-                # Gán cho raw_df & cleaned_df để dùng cho bước clean
-                self.raw_df = self.Rawdata.copy()
-                self.cleaned_df = self.Rawdata.copy()
+                df = load_rawdata(path)
+                self.Rawdata    = df
+                self.raw_df     = df.copy()
+                self.cleaned_df = df.copy()
 
-
-                # Thông báo kết quả (5 dòng đầu, shape)
-                head_info = self.Rawdata.head(5).to_string(index=False)
+                head_info = df.head(5).to_string(index=False)
                 QMessageBox.information(
                     self, "Đã nạp dữ liệu",
                     f"File: {os.path.basename(path)}\n"
-                    f"Shape: {self.Rawdata.shape}\n\n"
+                    f"Shape: {df.shape}\n\n"
                     f"Preview 5 dòng đầu:\n{head_info}"
                 )
+
             except Exception as e:
                 QMessageBox.critical(self, "Lỗi nạp dữ liệu", str(e))
-            return  # đã xử lý step 1, kết thúc
+            return  # kết thúc xử lý Step 1
+
+
+
+
         # --- STEP 2: Statistics / Profiling (HTML full fidelity) ---
         if step_no == 2:
             if getattr(self, "Rawdata", None) is None:

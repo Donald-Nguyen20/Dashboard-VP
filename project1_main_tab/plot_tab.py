@@ -272,14 +272,32 @@ class SimpleScaleDialog(QDialog):
         self.setWindowTitle("Scale từng biến")
         self.scales = scales or {}
         self.edits = {}
+
         layout = QVBoxLayout(self)
+
+        # Scroll area chứa danh sách biến (để không bị quá cao khi biến nhiều)
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # Nếu muốn giới hạn chiều cao dialog:
+        # scroll.setMinimumHeight(250)
+
+        container = QWidget()
+        form_layout = QVBoxLayout(container)
+        form_layout.setContentsMargins(0, 0, 0, 0)
+        form_layout.setSpacing(4)
+
         for var in variables:
             row = QHBoxLayout()
             row.addWidget(QLabel(var))
             edit = QLineEdit(str(self.scales.get(var, 1)))
             row.addWidget(edit)
-            layout.addLayout(row)
+            form_layout.addLayout(row)
             self.edits[var] = edit
+
+        scroll.setWidget(container)
+        layout.addWidget(scroll)
+
         btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btn_box.accepted.connect(self.accept)
         btn_box.rejected.connect(self.reject)

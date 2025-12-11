@@ -10,6 +10,7 @@ from PySide6.QtCore import QDateTime
 import json
 import os
 import mplcursors
+from project1_main_tab.Drift_modules.drift_minmax_varying import MinMaxVaryingDialog
 
 
 DRIFT_JSON_FILE = 'drift_params.json'
@@ -95,7 +96,7 @@ class DriftMonitorTab(QWidget):
         ctrl.addWidget(self.load_combo)
         # Chọn thuật toán
         self.algo_combo = QComboBox()
-        self.algo_combo.addItems(["EWMA", "CUSUM", "Trendline"])
+        self.algo_combo.addItems(["EWMA", "CUSUM", "Trendline", "Min/Max varying"])
         ctrl.addWidget(QLabel("Algorithm:"))
         ctrl.addWidget(self.algo_combo)
         # Tham số động (sau có thể mở rộng)
@@ -155,7 +156,13 @@ class DriftMonitorTab(QWidget):
         start = self.start_dt.dateTime().toPython()
         end = self.end_dt.dateTime().toPython()
         df = df[(df['Datetime'] >= start) & (df['Datetime'] <= end)]
-
+        if algo == "Min/Max varying":
+            if df.empty:
+                QMessageBox.warning(self, "Cảnh báo", "Không có dữ liệu trong khoảng thời gian đã chọn.")
+                return
+            dlg = MinMaxVaryingDialog(df, parent=self)
+            dlg.exec()
+            return
         df = assign_load_group(df)
         df = df[df['load_group'] == group]
         if df.empty:

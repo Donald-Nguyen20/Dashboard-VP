@@ -14,7 +14,7 @@ def resource_path(rel_path: str) -> str:
 
 
 class ML_Tab(QMainWindow):
-    def __init__(self):
+    def __init__(self, df_provider=None):
         super().__init__()
         self.setWindowTitle("ML Dashboard")
         self.resize(1400, 800)
@@ -27,7 +27,7 @@ class ML_Tab(QMainWindow):
         self.setCentralWidget(tabs)
 
         # Tab ML Application
-        self.ml_tab = MLApplicationTab(self)
+        self.ml_tab = MLApplicationTab(self, df_provider=df_provider)
         tabs.addTab(self.ml_tab, "ML Application")
 
         # ✨ Nạp theme ngay tại đây (thay cho main.py cũ)

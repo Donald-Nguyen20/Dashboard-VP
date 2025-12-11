@@ -5,6 +5,7 @@ from PySide6.QtWidgets import ( QWidget, QVBoxLayout, QPushButton, QTextEdit, QF
 from PySide6.QtWidgets import QTableView
 from PySide6.QtCore import QAbstractTableModel, Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout
+from project1_main_tab.Load_data_modules.nan_status_dialog import NaNStatusDialog
 
 
 class CsvCleanerWidget(QWidget):
@@ -402,10 +403,18 @@ class PreviewWidget(QWidget):
         self.btn_clean.clicked.connect(self.open_cleaning_dialog)
         filter_layout.addWidget(self.btn_clean)
 
+
+        # 👉 Nút NaN Manager
+        self.btn_nan = QPushButton("NaN status")
+        self.btn_nan.setFixedSize(110, 28)
+        self.btn_nan.clicked.connect(self.open_nan_status_dialog)
+        filter_layout.addWidget(self.btn_nan)
+
         self.btn_delete = QPushButton("🗑 Delete Features")
         self.btn_delete.setFixedSize(140, 28)
         self.btn_delete.clicked.connect(self.open_delete_columns_dialog)
         filter_layout.addWidget(self.btn_delete)
+
 
         # 📐 Formula Menu
         self.btn_formula_menu = QToolButton()
@@ -536,4 +545,34 @@ class PreviewWidget(QWidget):
     def open_delete_columns_dialog(self):
         dialog = DeleteColumnsDialog(self)
         if dialog.exec():
+            self.update_table()
+    def open_nan_status_dialog(self):
+        # 1. Kiểm tra có df_full hay chưa
+        if self.df_full is None or self.df_full.empty:
+            QMessageBox.warning(
+                self,
+                "NaN status",
+                "Chưa có dữ liệu hoặc DataFrame đang trống."
+            )
+            return
+
+        # 2. Mở dialog thống kê NaN
+        dialog = NaNStatusDialog(self.df_full, self)
+        if dialog.exec():
+            cleaned_df = dialog.get_cleaned_df()
+            if cleaned_df is None:
+                return
+
+            # 3. Cập nhật df_full bằng bản đã xóa NaN
+            self.df_full = cleaned_df
+
+            # 4. Cập nhật final_df cho MainWindow (Tab ML dùng)
+            main_window = self.parent()
+            if hasattr(main_window, "parent_main_window"):
+                main_window = main_window.parent_main_window
+
+            if main_window is not None and hasattr(main_window, "set_final_df"):
+                main_window.set_final_df(cleaned_df, folder_name=self.df_key)
+
+            # 5. Cập nhật bảng hiển thị theo filter thời gian hiện tại
             self.update_table()
