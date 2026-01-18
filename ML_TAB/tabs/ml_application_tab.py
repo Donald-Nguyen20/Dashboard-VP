@@ -31,7 +31,8 @@ from ML_TAB.Steps.Step3.outlier_dialog import OutlierResultsDialog
 from PySide6.QtWidgets import QDialog, QMessageBox, QComboBox
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from ML_TAB.Steps.Step4.line_visualization_dialog import DataLinePlotDialog
+from ML_TAB.Steps.Step3.split_data_dialog import SplitDataDialog
+from ML_TAB.Steps.Step5.regression_algorithms_dialog import RegressionAlgorithmsDialog
 
 
 
@@ -120,6 +121,15 @@ class MLApplicationTab(QWidget):
                 btn.setFixedSize(CARD_W, CARD_H)     # kích thước BẰNG Step 3
                 vlay.addWidget(btn, 0, Qt.AlignTop)
                 btn.clicked.connect(self._on_detect_outlier)
+                # 3.3) Nút con “Split data”
+                btn_split = QPushButton("Split data", box)
+                btn_split.setObjectName("btnSplitData")
+                btn_split.setFixedSize(CARD_W, CARD_H)   # nếu muốn cùng size như card
+                vlay.addWidget(btn_split, 0, Qt.AlignTop)
+                btn_split.clicked.connect(self._on_split_data)
+
+                self.btnSplitData = btn_split
+
 
                 # Đưa CỘT Step 3 (card + nút con) vào hàng ngang self.h
                 self.h.addWidget(box, 0, Qt.AlignTop)
@@ -353,26 +363,99 @@ class MLApplicationTab(QWidget):
 
         except Exception as e:
             QMessageBox.critical(self, "Lỗi Detect Outlier", str(e))
+    def _get_active_df_for_split(self):
+        df = getattr(self, "cleaned_df", None)
+        if df is not None and not df.empty:
+            return df
+
+        for name in ("raw_df", "df", "current_df", "Rawdata"):
+            cand = getattr(self, name, None)
+            if cand is not None and hasattr(cand, "empty") and not cand.empty:
+                return cand
+        return None
+    def _get_numeric_cols(self, df: pd.DataFrame):
+        return [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+
+    def build_xy_for_target(self, y_col: str):
+        """
+        Dùng train_idx/test_idx đã split ở Step 3.
+        Với target y_col, X = tất cả numeric cols còn lại.
+        """
+        df = self._get_active_df_for_split()
+        if df is None or df.empty:
+            raise ValueError("No active DataFrame")
+
+        if not hasattr(self, "train_idx") or not hasattr(self, "test_idx"):
+            raise ValueError("Bạn chưa Split data ở Step 3")
+
+        numeric_cols = self._get_numeric_cols(df)
+        if y_col not in numeric_cols:
+            raise ValueError(f"Target '{y_col}' phải là cột numeric")
+
+        x_cols = [c for c in numeric_cols if c != y_col]
+        if len(x_cols) == 0:
+            raise ValueError("Không còn biến nào làm X")
+
+        # lấy đúng rows theo split
+        train = df.loc[self.train_idx, x_cols + [y_col]].copy()
+        test = df.loc[self.test_idx, x_cols + [y_col]].copy()
+
+        # drop NaN đồng bộ để X/y khớp dòng
+        train = train.dropna(subset=x_cols + [y_col])
+        test = test.dropna(subset=x_cols + [y_col])
+
+        X_train = train[x_cols].values
+        y_train = train[y_col].values
+        X_test = test[x_cols].values
+        y_test = test[y_col].values
+
+        return x_cols, X_train, y_train, X_test, y_test
+
+
+    def _on_split_data(self):
+
+
+            df = self._get_active_df_for_split()
+            if df is None or df.empty:
+                QMessageBox.warning(self, "No data", "Chưa có DataFrame để split. Hãy load/clean trước.")
+                return
+
+            dlg = SplitDataDialog(df=df, parent=self)
+
+            if dlg.exec() == QDialog.Accepted and getattr(dlg, "result", None) is not None:
+                r = dlg.result
+
+                # ✅ Lưu index split để Step 5 dùng lại (không cần split lại)
+                self.train_idx = r.train_idx
+                self.test_idx = r.test_idx
+                self.split_test_size = r.test_size
+                self.split_seed = r.random_state
+
+                # (tuỳ chọn) Lưu luôn df train/test để xem nhanh
+                self.train_df = df.loc[self.train_idx].copy()
+                self.test_df = df.loc[self.test_idx].copy()
+
+                QMessageBox.information(
+                    self, "Done",
+                    f"Split xong!\nTrain: {len(self.train_idx)} | Test: {len(self.test_idx)}\n"
+                    f"Source: {'cleaned_df' if (self.cleaned_df is not None and not self.cleaned_df.empty) else 'raw_df/Rawdata'}"
+                )
+
+
+
     def _on_regression_clicked(self):
-        """
-        Handler cho nút Regression dưới Step 5.
-        Tạm thời chỉ hiện thông báo để test UI.
-        Sau này sẽ gọi dialog / pipeline Regression ở đây.
-        """
-        if self.cleaned_df is None:
-            QMessageBox.warning(
-                self,
-                "Chưa có dữ liệu",
-                "Hãy chạy Step 1 (và xử lý outlier ở Step 3 nếu cần) trước khi build Regression model."
-            )
+        if self.cleaned_df is None and self.Rawdata is None and self.raw_df is None:
+            QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy chạy Step 1 trước.")
             return
 
-        print("[UI] Step 5 - Regression clicked")
-        QMessageBox.information(
-            self,
-            "Regression",
-            "Regression button clicked (Step 5). Logic training sẽ được thêm sau."
-        )
+        # yêu cầu đã split để train (đúng pipeline)
+        if not hasattr(self, "train_idx") or not hasattr(self, "test_idx"):
+            QMessageBox.warning(self, "Chưa Split", "Hãy bấm Split data ở Step 3 trước khi Regression.")
+            return
+
+        dlg = RegressionAlgorithmsDialog(parent_tab=self, parent=self)
+        dlg.exec()
+
 
     def _on_classification_clicked(self):
         """

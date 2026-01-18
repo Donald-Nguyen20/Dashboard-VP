@@ -32,11 +32,11 @@ def generate_profile_json(
     )
 
     # Xuất JSON (để lưu trữ/so sánh)
-    with open(json_path, "w", encoding="utf-8") as f:
-        f.write(profile.to_json())
+    # with open(json_path, "w", encoding="utf-8") as f:
+    #     f.write(profile.to_json())
 
     # # Xuất HTML đầy đủ (UI giống hệt web)
-    # if html:
-    #     profile.to_file(html_path)
+    if html:
+        profile.to_file(html_path)
 
     return json_path, html_path

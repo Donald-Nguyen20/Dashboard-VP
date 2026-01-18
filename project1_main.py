@@ -289,10 +289,5 @@ QPushButton:pressed {
         # Tab 5 - Analysis Report
         self.analysis_report_tab = AnalysisReportTab(parent=self)
         self.tab_widget.addTab(self.analysis_report_tab, "📊 Analysis Report")
-                # Tab 7 - ML Steps (Step1–7)
-        self.ml_tab = MLApplicationTab(
-            parent=self,
-            df_provider=self.get_current_df_for_ml  # 👈 lấy final_df từ MainWindow
-        )
-        self.tab_widget.addTab(self.ml_tab, "🤖 ML Steps")
+
 

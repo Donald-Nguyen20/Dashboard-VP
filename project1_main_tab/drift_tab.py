@@ -11,7 +11,7 @@ import json
 import os
 import mplcursors
 from project1_main_tab.Drift_modules.drift_minmax_varying import MinMaxVaryingDialog
-
+from project1_main_tab.Drift_modules.drift_trend_mk import TrendOverviewDialog
 
 DRIFT_JSON_FILE = 'drift_params.json'
 
@@ -96,7 +96,7 @@ class DriftMonitorTab(QWidget):
         ctrl.addWidget(self.load_combo)
         # Chọn thuật toán
         self.algo_combo = QComboBox()
-        self.algo_combo.addItems(["EWMA", "CUSUM", "Trendline", "Min/Max varying"])
+        self.algo_combo.addItems(["EWMA", "CUSUM", "Trendline", "Min/Max varying", "Trend (Mann–Kendall)"])
         ctrl.addWidget(QLabel("Algorithm:"))
         ctrl.addWidget(self.algo_combo)
         # Tham số động (sau có thể mở rộng)
@@ -156,6 +156,8 @@ class DriftMonitorTab(QWidget):
         start = self.start_dt.dateTime().toPython()
         end = self.end_dt.dateTime().toPython()
         df = df[(df['Datetime'] >= start) & (df['Datetime'] <= end)]
+
+        # --- Nhánh Min/Max varying (giữ nguyên) ---
         if algo == "Min/Max varying":
             if df.empty:
                 QMessageBox.warning(self, "Cảnh báo", "Không có dữ liệu trong khoảng thời gian đã chọn.")
@@ -163,8 +165,20 @@ class DriftMonitorTab(QWidget):
             dlg = MinMaxVaryingDialog(df, parent=self)
             dlg.exec()
             return
+
+        # --- Nhánh Trend (Mann–Kendall) mới, dùng chính df đã lọc thời gian ---
+        if algo == "Trend (Mann–Kendall)":
+            if df.empty:
+                QMessageBox.warning(self, "Cảnh báo", "Không có dữ liệu trong khoảng thời gian đã chọn.")
+                return
+            dlg = TrendOverviewDialog(df, time_col="Datetime", parent=self)
+            dlg.exec()
+            return
+
+        # --- Các thuật toán còn lại: EWMA, CUSUM, Trendline... ---
         df = assign_load_group(df)
         df = df[df['load_group'] == group]
+
         if df.empty:
             QMessageBox.warning(self, "Cảnh báo", f"Không có dữ liệu cho nhóm tải '{group}' trong khoảng thời gian đã chọn.")
             return

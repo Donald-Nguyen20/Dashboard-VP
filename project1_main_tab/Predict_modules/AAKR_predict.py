@@ -20,7 +20,7 @@ class AAKR_predict(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        header = QLabel("🔮 AAKR Predict - Dự báo rolling window (train & predict)")
+        header = QLabel("🔮 AAKR Predict - rolling window (train & predict)")
         header.setStyleSheet("font-weight: bold; font-size: 17px;")
         layout.addWidget(header)
 
@@ -29,18 +29,18 @@ class AAKR_predict(QWidget):
         self.combo_df = QComboBox()
         hlayout.addWidget(self.combo_df)
 
-        hlayout.addWidget(QLabel("Số ngày dùng train:"))
-        self.input_train_days = QLineEdit("20")
-        self.input_train_days.setMaximumWidth(60)
+        hlayout.addWidget(QLabel("Days for training:"))
+        self.input_train_days = QLineEdit("30")
+        self.input_train_days.setMaximumWidth(90)
         hlayout.addWidget(self.input_train_days)
 
-        hlayout.addWidget(QLabel("Từ ngày (predict):"))
+        hlayout.addWidget(QLabel("From (predict):"))
         self.input_start_time = QDateTimeEdit()
         self.input_start_time.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
         self.input_start_time.setCalendarPopup(True)
         hlayout.addWidget(self.input_start_time)
 
-        hlayout.addWidget(QLabel("Đến ngày (predict):"))
+        hlayout.addWidget(QLabel("To (predict):"))
         self.input_end_time = QDateTimeEdit()
         self.input_end_time.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
         self.input_end_time.setCalendarPopup(True)
@@ -59,7 +59,7 @@ class AAKR_predict(QWidget):
         self.combo_col = QComboBox()  # Không dùng nhưng giữ cấu trúc nếu cần mở rộng
 
 
-        hlayout.addWidget(QLabel("Số hàng xóm k:"))
+        hlayout.addWidget(QLabel("K-nearest neighbors:"))
         self.input_k = QLineEdit("10")
         self.input_k.setMaximumWidth(50)
         hlayout.addWidget(self.input_k)
@@ -82,11 +82,26 @@ class AAKR_predict(QWidget):
             self.combo_col.addItems(numeric_cols)
             # Thiết lập mốc thời gian mặc định
             if "Datetime" in df.columns and not df["Datetime"].isnull().all():
-                min_time = df["Datetime"].min()
-                max_time = df["Datetime"].max()
-                self.input_start_time.setDateTime(QDateTime(min_time))
-                self.input_end_time.setDateTime(QDateTime(max_time))
+                df["Datetime"] = pd.to_datetime(df["Datetime"], errors="coerce")
+                df = df.dropna(subset=["Datetime"])
 
+                if not df.empty:
+                    min_time = df["Datetime"].min()
+                    max_time = df["Datetime"].max()
+                    self._set_default_predict_last_30_days(min_time, max_time)
+
+
+    def _set_default_predict_last_30_days(self, min_time, max_time):
+        # convert to python datetime
+        max_dt = pd.to_datetime(max_time).to_pydatetime()
+        min_dt = pd.to_datetime(min_time).to_pydatetime()
+
+        start_30 = (pd.Timestamp(max_dt) - pd.Timedelta(days=30)).to_pydatetime()
+        start_dt = max(start_30, min_dt)  # nếu data < 30 ngày thì bám min
+
+        # CHỈ set giá trị hiển thị (default), KHÔNG set min/max để khỏi khóa user
+        self.input_start_time.setDateTime(QDateTime(start_dt))
+        self.input_end_time.setDateTime(QDateTime(max_dt))
 
     def get_current_df(self):
         df_fullname = self.combo_df.currentText()
@@ -113,7 +128,7 @@ class AAKR_predict(QWidget):
         self.table.clear()
         df = self.get_current_df()
         if df is None or df.empty:
-            QMessageBox.warning(self, "Dữ liệu trống", "Không có DataFrame.")
+            QMessageBox.warning(self, "Data is empty", "No DataFrame.")
             return
 
         try:
@@ -123,7 +138,7 @@ class AAKR_predict(QWidget):
                 raise ValueError()
 
         except Exception:
-            QMessageBox.warning(self, "Nhập sai", "Số ngày train và k phải là số nguyên dương.")
+            QMessageBox.warning(self, "Input value is wrong", "Train days and k must be positive integers.")
             return
 
         # Yêu cầu cột "Datetime"
@@ -142,14 +157,14 @@ class AAKR_predict(QWidget):
             if train_days < 1 or k < 1:
                 raise ValueError()
         except Exception:
-            QMessageBox.warning(self, "Nhập sai", "Số ngày train và k phải là số nguyên dương.")
+            QMessageBox.warning(self, "Input value is wrong", "Train days and k must be positive integers.")
             return
 
         # Lấy vùng predict từ QDateTimeEdit
         predict_start = self.input_start_time.dateTime().toPython()
         predict_end = self.input_end_time.dateTime().toPython()
         if predict_end < predict_start:
-            QMessageBox.warning(self, "Lỗi", "Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu.")
+            QMessageBox.warning(self, "Error", "End date must be greater than or equal to start date.")
             return
 
         pred_df = df[(df["Datetime"] >= predict_start) & (df["Datetime"] <= predict_end)]
@@ -212,9 +227,9 @@ class AAKR_predict(QWidget):
             pct_err = np.where(real_y != 0, abs_err / np.abs(real_y) * 100, 0)
 
             pred_index = pred_data.index
-            predicted_df.loc[pred_index, f"{col_predict}_Thực tế"] = real_y
-            predicted_df.loc[pred_index, f"{col_predict}_Dự đoán"] = preds
-            predicted_df.loc[pred_index, f"{col_predict}_% Sai lệch"] = pct_err
+            predicted_df.loc[pred_index, f"{col_predict}_Current"] = real_y
+            predicted_df.loc[pred_index, f"{col_predict}_Prediction"] = preds
+            predicted_df.loc[pred_index, f"{col_predict}_% Deviation"] = pct_err
 
         # Lưu vào MainWindow
         df_fullname = self.combo_df.currentText()
@@ -226,16 +241,20 @@ class AAKR_predict(QWidget):
             self.parent.dataframes[predicted_name] = predicted_df
         self.predicted_result_df = predicted_df.copy()
         self.show_results(predicted_df)
-        QMessageBox.information(self, "Thành công", f"Đã tạo DataFrame '{predicted_name}' với kết quả dự đoán!")
+        QMessageBox.information(self, "Success", f"Created DataFrame '{predicted_name}' with prediction results!")
 
     def show_results(self, df):
         self.table.clear()
         # Thiết lập lại mốc thời gian cho filter (nếu có cột Datetime)
         if "Datetime" in df.columns and not df["Datetime"].isnull().all():
-            min_time = df["Datetime"].min()
-            max_time = df["Datetime"].max()
-            self.input_start_time.setDateTime(QDateTime(min_time))
-            self.input_end_time.setDateTime(QDateTime(max_time))
+            df["Datetime"] = pd.to_datetime(df["Datetime"], errors="coerce")
+            df = df.dropna(subset=["Datetime"])
+
+            if not df.empty:
+                min_time = df["Datetime"].min()
+                max_time = df["Datetime"].max()
+                self._set_default_predict_last_30_days(min_time, max_time)
+
         # Chỉ hiển thị 100 dòng mới nhất!
         if len(df) > 100:
             df = df.tail(100)
@@ -247,15 +266,15 @@ class AAKR_predict(QWidget):
             for j, col in enumerate(df.columns):
                 val = df.iloc[i, j]
                 item = QTableWidgetItem(str(round(val, 4)) if isinstance(val, float) else str(val))
-                if "_% Sai lệch" in col:
+                if "_% Deviation" in col:
                     try:
                         percent = abs(float(val))
                         if percent > 15:
                             item.setForeground(Qt.red)
-                            item.setToolTip("🚨 Sai lệch > 15%")
+                            item.setToolTip("🚨 Deviation> 15%")
                         elif percent > 10:
                             item.setForeground(Qt.darkYellow)
-                            item.setToolTip("⚠️ Sai lệch > 10%")
+                            item.setToolTip("⚠️ Deviation > 10%")
                     except:
                         pass
                 self.table.setItem(i, j, item)

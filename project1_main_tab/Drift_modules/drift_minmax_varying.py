@@ -104,13 +104,7 @@ class MinMaxVaryingDialog(QDialog):
 
         header_layout.addSpacing(12)
 
-        lbl_feat = QLabel("Feature plot:")
-        self.cb_feature = QComboBox()
-        self.cb_feature.addItems(self.feature_names)
-        self.cb_feature.currentTextChanged.connect(self.update_plot)
 
-        header_layout.addWidget(lbl_feat)
-        header_layout.addWidget(self.cb_feature)
         header_layout.addStretch()
 
         main_layout.addLayout(header_layout)
@@ -128,6 +122,19 @@ class MinMaxVaryingDialog(QDialog):
         self.build_minmax_table()
         self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
+        # --- Click vào dòng / tên biến để đổi plot ---
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionMode(QTableWidget.SingleSelection)
+
+        # click vào bất kỳ ô nào trong dòng -> đổi plot
+        self.table.cellClicked.connect(self._on_table_cell_clicked)
+
+        # click đúng tên biến ở header trái -> đổi plot
+        vh = self.table.verticalHeader()
+        vh.setSectionsClickable(True)
+        vh.sectionClicked.connect(self._on_vertical_header_clicked)
+
+
         scroll_layout.addWidget(QLabel("Bảng Δmin% / Δmax% so với tháng hiện tại"))
         scroll_layout.addWidget(self.table)
 
@@ -144,8 +151,11 @@ class MinMaxVaryingDialog(QDialog):
         scroll_area.setWidget(scroll_content)
         main_layout.addWidget(scroll_area)
 
-        # Vẽ plot lần đầu
-        self.update_plot(self.cb_feature.currentText())
+        # Vẽ plot lần đầu (mặc định dòng 0)
+        self.current_feature = self.feature_names[0]
+        self.table.selectRow(0)
+        self.update_plot(self.current_feature)
+
 
     # -------------------------------------------------
     def build_minmax_table(self):
@@ -186,11 +196,11 @@ class MinMaxVaryingDialog(QDialog):
             delta_headers.append(f"{idx}M ago\n({str(m)})")
 
         # ----- Header cảnh báo MAX + MIN -----
-        alert_max_headers = ["Shock Max 1M (>20%)"]
+        alert_max_headers = ["Fluctuation Max 1M (>20%)"]
         for k in range(2, base_cols + 1):
             alert_max_headers.append(f"Trend Max {k}M")
 
-        alert_min_headers = ["Shock Min 1M (>20%)"]
+        alert_min_headers = ["Fluctuation Min 1M (>20%)"]
         for k in range(2, base_cols + 1):
             alert_min_headers.append(f"Trend Min {k}M")
 
@@ -354,6 +364,24 @@ class MinMaxVaryingDialog(QDialog):
         self.table.resizeColumnsToContents()
         self.table.resizeRowsToContents()
 
+    def _select_feature(self, feat: str):
+        """Chọn feature bằng click bảng -> vẽ plot ngay."""
+        if feat not in self.feature_names:
+            return
+        self.current_feature = feat
+        self.update_plot(feat)
+
+
+    def _on_table_cell_clicked(self, row: int, col: int):
+        """Click vào cell bất kỳ -> dùng row để suy ra feature."""
+        if 0 <= row < len(self.feature_names):
+            self._select_feature(self.feature_names[row])
+
+    def _on_vertical_header_clicked(self, row: int):
+        """Click vào tên biến (vertical header) -> chọn row + đổi plot."""
+        if 0 <= row < len(self.feature_names):
+            self.table.selectRow(row)
+            self._select_feature(self.feature_names[row])
 
 
     # -------------------------------------------------
