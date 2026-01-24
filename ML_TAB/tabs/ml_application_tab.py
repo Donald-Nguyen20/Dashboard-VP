@@ -33,7 +33,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from ML_TAB.Steps.Step3.split_data_dialog import SplitDataDialog
 from ML_TAB.Steps.Step5.regression_algorithms_dialog import RegressionAlgorithmsDialog
-
+from ML_TAB.Steps.Step6.model_compare_dialog import ModelCompareDialog
 
 
 class MLApplicationTab(QWidget):
@@ -266,6 +266,11 @@ class MLApplicationTab(QWidget):
         # --- STEP 4: Data visualization (Line) ---
         if step_no == 4:
             self._show_line_visualization()
+            return
+        # --- STEP 6: Model evaluation / comparison ---
+        if step_no == 6:
+            dlg = ModelCompareDialog(parent_tab=self, parent=self)
+            dlg.exec()
             return
         # === CÁC STEP KHÁC (mặc định như cũ) ===
         if step_no != 7:

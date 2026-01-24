@@ -14,7 +14,7 @@ from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.metrics import mean_squared_error
 from PySide6.QtWidgets import QTableWidget, QTableWidgetItem
 import numpy as np
-
+from sklearn.preprocessing import StandardScaler
 
 class RegressionAlgorithmsDialog(QDialog):
     """
@@ -143,6 +143,10 @@ class RegressionAlgorithmsDialog(QDialog):
         if len(y_train) < 20 or len(y_test) < 5:
             QMessageBox.warning(self, "Dữ liệu ít", f"Không đủ dữ liệu sau dropna. Train={len(y_train)}, Test={len(y_test)}")
             return
+        # 3) scaler (fit on train, transform train + test)
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train)   # fit + transform train
+        X_test  = scaler.transform(X_test)        # transform test only
 
         # 3) train
         model = LinearRegression()
@@ -177,6 +181,7 @@ class RegressionAlgorithmsDialog(QDialog):
         self.parent_tab.models_by_target.setdefault(y_col, {})
         self.parent_tab.models_by_target[y_col]["LinearRegression"] = {
             "model": model,
+            "scaler": scaler,
             "x_cols": x_cols,
             "mae": mae,
             "r2": r2,

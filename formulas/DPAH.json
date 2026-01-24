@@ -1,0 +1,6 @@
+{
+    "df": "duchien",
+    "formula_name": "DPAH",
+    "formula": "`ECO O/L FG PRS`-`AH O/L FG PRS`",
+    "alert_condition": ""
+}

@@ -42,6 +42,45 @@
   min-height: 42px;
   min-width: 180px;
 }
+/* === SHAPE/FORM: Detect Outlier + Split Data giống hệt nhau === */
+#btnDetectOutlier,
+#btnSplitData {
+  border: 1px solid rgba(0,0,0,0.10);
+  border-radius: 14px;          /* biên dạng bo góc */
+  padding: 6px 16px;            /* độ dày viền trong */
+  min-height: 42px;             /* chiều cao nút */
+  min-width: 180px;             /* chiều rộng tối thiểu */
+  font-weight: 700;
+  font-size: 14pt;
+}
+
+/* === COLOR: nền giống nhau === */
+#btnDetectOutlier,
+#btnSplitData {
+  background: #ffe2de;
+}
+
+/* === HOVER: giống hệt === */
+#btnDetectOutlier:hover,
+#btnSplitData:hover {
+  border-color: rgba(0,0,0,0.25);
+  background: #ff8f86;
+}
+
+/* === PRESSED: giống hệt === */
+#btnDetectOutlier:pressed,
+#btnSplitData:pressed {
+  border-color: rgba(0,0,0,0.35);
+  background: #ff6f66;
+}
+
+/* === DISABLED: giống hệt (nếu có) === */
+#btnDetectOutlier:disabled,
+#btnSplitData:disabled {
+  background: rgba(255,226,222,0.45);
+  border-color: rgba(0,0,0,0.08);
+  color: rgba(0,0,0,0.35);
+}
 
 /* NỀN RIÊNG CHO TỪNG LOẠI NÚT */
 
