@@ -15,6 +15,7 @@ from sklearn.metrics import mean_squared_error
 from PySide6.QtWidgets import QTableWidget, QTableWidgetItem
 import numpy as np
 from sklearn.preprocessing import StandardScaler
+from ML_TAB.Steps.Step5.multi_linear_regression import fit_predict_multilinear_exclude_self
 
 class RegressionAlgorithmsDialog(QDialog):
     """
@@ -63,9 +64,14 @@ class RegressionAlgorithmsDialog(QDialog):
         self._add_algorithm(
             key="LinearRegression",
             title="LinearRegression (sklearn)",
-
             train_fn=self._train_linear_regression
         )
+        self._add_algorithm(
+            key="MultiLinearRegression",
+            title="Multi-Linear Regression (exclude-self, reconstruction like AAKR)",
+            train_fn=self._train_multi_linear_regression
+        )
+
 
         # default select first
         if self.list_algo.count() > 0:
@@ -212,4 +218,128 @@ class RegressionAlgorithmsDialog(QDialog):
             self, "Train OK",
             f"LinearRegression | Target: {y_col}\nMAE: {mae:.6f} | R²: {r2:.6f}\nĐã cập nhật bảng Actual vs Prediction bên dưới."
         )
+    def _train_multi_linear_regression(self):
+        # 1) kiểm tra đã split chưa
+        if not hasattr(self.parent_tab, "train_idx") or not hasattr(self.parent_tab, "test_idx"):
+            QMessageBox.warning(self, "Chưa Split", "Hãy bấm Split data ở Step 3 trước.")
+            return
+
+        # 2) lấy df active
+        df_active = self.parent_tab._get_active_df_for_split()
+        if df_active is None or df_active.empty:
+            QMessageBox.warning(self, "No data", "Chưa có DataFrame để train. Hãy load/clean trước.")
+            return
+
+        # 3) train/predict exclude-self
+        try:
+            res = fit_predict_multilinear_exclude_self(
+                df=df_active,
+                train_idx=self.parent_tab.train_idx,
+                test_idx=self.parent_tab.test_idx,
+                alpha=1.0,
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Train lỗi", str(e))
+            return
+
+        # 4) lưu lại để dùng sau
+        self.parent_tab.trained_models = getattr(self.parent_tab, "trained_models", {})
+        self.parent_tab.trained_models["MultiLinearRegression"] = {
+            "models_by_feature": res.models,
+            "scaler": res.scaler,
+            "numeric_cols": res.numeric_cols,
+            "n_train": res.n_train,
+            "n_test": res.n_test,
+        }
+                # 4.5) ✅ Đẩy metrics vào models_by_target để Step 6 đọc được
+        # Step6 chỉ load từ parent_tab.models_by_target[target][algo]
+        if not hasattr(self.parent_tab, "models_by_target"):
+            self.parent_tab.models_by_target = {}
+
+        # res.metrics_df có cột: Feature, MAE, RMSE, R2
+        # res.models[col] có: model + input_cols
+        for _, r in res.metrics_df.iterrows():
+            feat = str(r["Feature"])
+            mae = float(r["MAE"])
+            rmse = float(r["RMSE"])
+            r2 = float(r["R2"])
+            mse = float(rmse ** 2)
+
+            # Lưu record theo đúng format Step6 đang hiểu
+            self.parent_tab.models_by_target.setdefault(feat, {})
+            self.parent_tab.models_by_target[feat]["MultiLinearRegression"] = {
+                "task": "regression",
+                "algo": "MultiLinearRegression",
+                "target": feat,
+
+                # ✅ metrics Step6 support
+                "r2": r2,
+                "rmse": rmse,
+                "mse": mse,
+                "mae": mae,
+
+                # ✅ bundle để Step7/Save dùng được (target-specific model)
+                # model dự đoán 'feat' từ các biến còn lại
+                "model": res.models[feat]["model"],
+                "scaler": res.scaler,
+                "x_cols": res.models[feat]["input_cols"],
+
+                # thêm metadata
+                "bundle_type": "multilr_feature"
+            }
+
+        # (tuỳ anh) thêm 1 dòng "global" để Step6 có 1 hàng tổng quan
+        # để so sánh Multi theo mean metrics
+        try:
+            mean_r2 = float(res.metrics_df["R2"].mean())
+            mean_rmse = float(res.metrics_df["RMSE"].mean())
+            mean_mae = float(res.metrics_df["MAE"].mean())
+            mean_mse = float((res.metrics_df["RMSE"] ** 2).mean())
+            global_key = "__RECONSTRUCTION__"  # một "target giả" cho so sánh tổng thể
+
+            self.parent_tab.models_by_target.setdefault(global_key, {})
+            self.parent_tab.models_by_target[global_key]["MultiLinearRegression"] = {
+                "task": "regression",
+                "algo": "MultiLinearRegression",
+                "target": global_key,
+
+                "r2": mean_r2,
+                "rmse": mean_rmse,
+                "mse": mean_mse,
+                "mae": mean_mae,
+
+                # ✅ bundle đầy đủ để deploy kiểu AAKR (A,B,C,D... actual/pred/error)
+                "models_by_feature": {k: v["model"] for k, v in res.models.items()},
+                "scaler": res.scaler,
+                "numeric_cols": res.numeric_cols,
+                "bundle_type": "multilr_full"
+            }
+        except Exception:
+            pass
+
+
+        # 5) update UI (bảng metrics theo biến)
+        ref = self._ui_refs.get("MultiLinearRegression")
+        if ref:
+            ref["metrics"].setText(
+                f"Metrics (TEST, per-feature) | Features: {len(res.numeric_cols)} | "
+                f"Train rows: {res.n_train} | Test rows: {res.n_test} | Ridge exclude-self"
+            )
+
+            tbl = ref["table"]
+            tbl.setColumnCount(4)
+            tbl.setHorizontalHeaderLabels(["Feature", "MAE", "RMSE", "R²"])
+
+            dfm = res.metrics_df
+            tbl.setRowCount(len(dfm))
+            for i in range(len(dfm)):
+                row = dfm.iloc[i]
+                tbl.setItem(i, 0, QTableWidgetItem(str(row["Feature"])))
+                tbl.setItem(i, 1, QTableWidgetItem(f"{float(row['MAE']):.6f}"))
+                tbl.setItem(i, 2, QTableWidgetItem(f"{float(row['RMSE']):.6f}"))
+                tbl.setItem(i, 3, QTableWidgetItem(f"{float(row['R2']):.6f}"))
+
+            tbl.resizeColumnsToContents()
+
+        QMessageBox.information(self, "OK", "MultiLinearRegression (exclude-self) đã train xong.")
 

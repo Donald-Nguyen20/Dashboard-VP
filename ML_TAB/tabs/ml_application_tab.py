@@ -13,7 +13,6 @@ from ML_TAB.widgets.step_card import StepCard
 from ML_TAB.Steps.Step7.Load_and_Deployment import predict_from_model
 from ML_TAB.Steps.Step1.data_collection import load_rawdata
 from ML_TAB.Steps.Step2.profile_report import generate_profile_json
-# from ML_TAB.Steps.Step2.dashboard_widget import ProfileDashboard
 from PySide6.QtWidgets import QLabel, QDoubleSpinBox, QPushButton
 from ML_TAB.Steps.Step3.outlier_tools import (
     detect_outliers_iqr,
@@ -67,7 +66,7 @@ class MLApplicationTab(QWidget):
         # 👇 cấu hình viewport (chỉ cần 1 lần setObjectName)
         vp = scroll.viewport()
         vp.setObjectName("mlViewport")
-        vp.setAttribute(Qt.WA_StyledBackground, True)  # Quan trọng để nền QSS có hiệu lực
+        vp.setAttribute(Qt.WA_StyledBackground, True)
 
         self.Rawdata = None
         self.raw_df = None
@@ -80,7 +79,7 @@ class MLApplicationTab(QWidget):
         self.h.setSpacing(16)
 
         self._add_step_cards()
-        self.h.addStretch(1)  # đẩy cụm card sát trái
+        self.h.addStretch(1)
 
         # Font chung nhẹ nhàng (màu/viền do QSS quyết định)
         base_font = QFont()
@@ -115,21 +114,20 @@ class MLApplicationTab(QWidget):
                 # 3.1) Step 3 card (giữ như cũ)
                 vlay.addWidget(card, 0, Qt.AlignTop)
 
-                # 3.2) Nút con “Detect Outlier”
+                # 3.2) Nút con "Detect Outlier"
                 btn = QPushButton("Detect Outlier", box)
                 btn.setObjectName("btnDetectOutlier")
-                btn.setFixedSize(CARD_W, CARD_H)     # kích thước BẰNG Step 3
+                btn.setFixedSize(CARD_W, CARD_H)
                 vlay.addWidget(btn, 0, Qt.AlignTop)
                 btn.clicked.connect(self._on_detect_outlier)
-                # 3.3) Nút con “Split data”
+                # 3.3) Nút con "Split data"
                 btn_split = QPushButton("Split data", box)
                 btn_split.setObjectName("btnSplitData")
-                btn_split.setFixedSize(CARD_W, CARD_H)   # nếu muốn cùng size như card
+                btn_split.setFixedSize(CARD_W, CARD_H)
                 vlay.addWidget(btn_split, 0, Qt.AlignTop)
                 btn_split.clicked.connect(self._on_split_data)
 
                 self.btnSplitData = btn_split
-
 
                 # Đưa CỘT Step 3 (card + nút con) vào hàng ngang self.h
                 self.h.addWidget(box, 0, Qt.AlignTop)
@@ -241,9 +239,7 @@ class MLApplicationTab(QWidget):
 
             except Exception as e:
                 QMessageBox.critical(self, "Lỗi nạp dữ liệu", str(e))
-            return  # kết thúc xử lý Step 1
-
-
+            return
 
 
         # --- STEP 2: Statistics / Profiling (HTML full fidelity) ---
@@ -255,11 +251,9 @@ class MLApplicationTab(QWidget):
                 json_path, html_path = generate_profile_json(
                     self.Rawdata,
                     out_dir="reports",
-                    html=True,         # đảm bảo có file HTML
-                    minimal=True       # True: nhanh; False: đầy đủ hơn nhưng lâu hơn
+                    html=True,
+                    minimal=True
                 )
-                # dash = ProfileDashboard(html_path, parent=self)
-                # dash.show()
             except Exception as e:
                 QMessageBox.critical(self, "Lỗi Step 2", str(e))
             return
@@ -302,6 +296,7 @@ class MLApplicationTab(QWidget):
             )
         except Exception:
             QMessageBox.critical(self, "Lỗi", traceback.format_exc())
+
     def _on_detect_outlier(self):
         # 1) Kiểm tra dữ liệu
         if self.raw_df is None and self.Rawdata is None:
@@ -368,6 +363,7 @@ class MLApplicationTab(QWidget):
 
         except Exception as e:
             QMessageBox.critical(self, "Lỗi Detect Outlier", str(e))
+
     def _get_active_df_for_split(self):
         df = getattr(self, "cleaned_df", None)
         if df is not None and not df.empty:
@@ -378,6 +374,7 @@ class MLApplicationTab(QWidget):
             if cand is not None and hasattr(cand, "empty") and not cand.empty:
                 return cand
         return None
+
     def _get_numeric_cols(self, df: pd.DataFrame):
         return [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
 
@@ -418,8 +415,6 @@ class MLApplicationTab(QWidget):
 
 
     def _on_split_data(self):
-
-
             df = self._get_active_df_for_split()
             if df is None or df.empty:
                 QMessageBox.warning(self, "No data", "Chưa có DataFrame để split. Hãy load/clean trước.")

@@ -5,10 +5,7 @@ import os
 from pathlib import Path
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget, QPushButton
 from project1_main import MainWindow
-# from windows.ML_tab import ML_Tab
 from ML_TAB.windows.ML_tab import ML_Tab
-
-
 
 
 def app_dir():
@@ -19,15 +16,9 @@ def app_dir():
     if getattr(sys, 'frozen', False):
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent
+
 def apply_dark_theme(app):
     dark_stylesheet = """
-    QWidget { 
-    background-color: #f5f7fa;
-    color: #232b34;
-    font-family: 'Segoe UI', 'Arial', sans-serif;
-    font-size: 14px;
-}
-
 QWidget { 
     background-color: #f5f7fa;
     color: #232b34;
@@ -76,12 +67,6 @@ QPushButton:hover {
 /* ==== TEXT INPUT ==== */
 QLineEdit, QTextEdit {
     background-color: #ffffff;
-    color: #212b36;
-    border: 1px solid #b6c7d8;
-    border-radius: 5px;
-}
-QLineEdit {
-    background: #fff;
     color: #1b2a38;
     border: 1px solid #b6c7d8;
     border-radius: 5px;
@@ -172,15 +157,17 @@ QCheckBox::indicator:unchecked {
     border: 2px solid #222;
 }
 QCheckBox::indicator:checked {
-    background: #52a2fa;      /* hoặc #b8d3f4 pastel hơn */
+    background: #52a2fa;
     border: 2px solid #222;
 }
 QCheckBox::indicator:unchecked:hover, QCheckBox::indicator:checked:hover {
     background: #b8d3f4;
     border: 2px solid #0057b8;
 }
+
+/* ==== MENU ==== */
 QMenu {
-    background-color: #e0ecff;      /* Trùng với QComboBox, QToolBar */
+    background-color: #e0ecff;
     color: #1b2a38;
     border: 1.2px solid #b6c7d8;
     border-radius: 6px;
@@ -192,11 +179,13 @@ QMenu::item {
     padding: 8px 20px;
 }
 QMenu::item:selected {
-    background: #cde0fd;     /* Hover màu pastel giống QComboBox */
+    background: #cde0fd;
     color: #0057b8;
 }
+
+/* ==== TOOLBUTTON ==== */
 QToolButton {
-    background: #e0ecff;      /* Xanh nhạt đồng bộ */
+    background: #e0ecff;
     color: #1b2a38;
     border: 1.2px solid #b6c7d8;
     border-radius: 6px;
@@ -204,29 +193,28 @@ QToolButton {
     padding: 5px 12px;
 }
 QToolButton::menu-indicator {
-    image: none;                /* Loại bỏ icon hệ thống (nếu muốn tự style) */
-    background: #e0ecff;        /* Đồng bộ với nền */
+    image: none;
+    background: #e0ecff;
     border-left: 1.2px solid #b6c7d8;
     width: 20px;
 }
 QToolButton::menu-button {
-    background: #e0ecff;        /* Đồng bộ luôn phần xổ xuống */
+    background: #e0ecff;
     border-left: 1.2px solid #b6c7d8;
     border-top-right-radius: 6px;
     border-bottom-right-radius: 6px;
 }
 QToolButton:pressed, QToolButton:checked {
-    background: #d0e7ff;        /* Hover hoặc click */
+    background: #d0e7ff;
 }
 QToolButton:hover {
     background: #cde0fd;
     color: #0057b8;
     border: 1.5px solid #245cb6;
 }
-
-
     """
     app.setStyleSheet(dark_stylesheet)
+
 class MasterWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -246,12 +234,9 @@ class MasterWindow(QMainWindow):
         ml_widget.setStyleSheet(ml_win.styleSheet())
         self.tab_widget.addTab(ml_widget, "🤖 ML Application")
 
-
-
-
     def add_new_project_tab(self):
         main_window = MainWindow()
-        widget = main_window.centralWidget()  # Nhúng layout chính của MainWindow vào tab
+        widget = main_window.centralWidget()
         index = self.tab_widget.addTab(widget, f"📁 Project {self.tab_widget.count() + 1}")
         self.tab_widget.setCurrentIndex(index)
 
@@ -262,3 +247,4 @@ if __name__ == "__main__":
     window = MasterWindow()
     window.show()
     sys.exit(app.exec())
+    

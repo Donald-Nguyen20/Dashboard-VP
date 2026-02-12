@@ -94,7 +94,7 @@ class CsvCleanerWidget(QWidget):
 
         # Gán kết quả về main
         if self.parent_main_window:
-            self.parent_main_window.set_final_df(merged_df) #set_final_df là phương thức trong main.py để cập nhật dữ liệu
+            self.parent_main_window.set_final_df(merged_df)
         self.df = merged_df
         self.text = lambda: "MergedData"
         self.cell_range = "merged"
@@ -304,7 +304,7 @@ class CsvCleanerWidget(QWidget):
             self.layout().removeWidget(self.preview_widget)
             self.preview_widget.deleteLater()
 
-        df_preview = final_df.tail(100) # xem 100 dòng đầu tiên với head(100)
+        df_preview = final_df.tail(100)
         widget = PreviewWidget(df_preview, self, df_key=folder_name)
         widget.df_full = final_df
         self.preview_widget = widget
@@ -314,7 +314,7 @@ class CsvCleanerWidget(QWidget):
         print(f"📆 Tổng {len(final_df)} dòng dữ liệu trong: {sqlite_path.name}")
 
 
-class PandasModel(QAbstractTableModel): #Chuyển một pandas.DataFrame thành mô hình bảng hiển thị được trên QTableView
+class PandasModel(QAbstractTableModel):
     def __init__(self, df=pd.DataFrame(), parent=None):
         super().__init__(parent)
         self._df = df
@@ -356,36 +356,17 @@ from project1_main_tab.Formula_modules.insert_formula import insert_formula_feat
 
 
 
-#Hiển thị dữ liệu DataFrame dưới dạng bảng, đồng thời tích hợp các công cụ sau:
-# 🧩 Tính năng:
-# Lọc theo thời gian (Datetime): Tích hợp từ timeline_filter.
-# Làm sạch dữ liệu: Gọi DataCleaningDialog.
-# Xóa cột không cần thiết: Gọi DeleteColumnsDialog.
-# Xuất file: CSV hoặc Excel.
-# Cập nhật bảng theo vùng lọc thời gian.
 class PreviewWidget(QWidget):
     def __init__(self, df, parent=None, df_key="MergedData"):
         super().__init__(parent)
         self.df_full = df.copy()
         self.df_key = df_key
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)  # 💥 Bỏ margin quanh layout
-        layout.setSpacing(0)  # Hoặc = 0 nếu muốn dính sát
-
-
-
-        # 👉 Thêm thanh lọc thời gian
-
-        # 👉 Kiểm tra nếu có cột 'Datetime' mới thêm bộ lọc thời gian
-        #if 'Datetime' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Datetime']):
-           # filter_layout, self.start_time, self.end_time = create_datetime_filter_controls(df, self.update_table)
-           # layout.addLayout(filter_layout)
-     #   else:
-            #self.start_time = None
-            #self.end_time = None
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
         filter_layout, self.start_time, self.end_time = create_datetime_filter_controls(df)
-        filter_layout.setSpacing(10)  # hoặc 12, 16... tùy độ rộng mong muốn
+        filter_layout.setSpacing(10)
         self.start_time.setFixedWidth(180)
         self.end_time.setFixedWidth(180)
 
@@ -396,13 +377,11 @@ class PreviewWidget(QWidget):
         self.btn_refresh.clicked.connect(self.update_table)
         filter_layout.addWidget(self.btn_refresh)
 
-
         # 👉 Nút Clean Data
         self.btn_clean = QPushButton("🧹 Clean Data")
         self.btn_clean.setFixedSize(120, 28)
         self.btn_clean.clicked.connect(self.open_cleaning_dialog)
         filter_layout.addWidget(self.btn_clean)
-
 
         # 👉 Nút NaN Manager
         self.btn_nan = QPushButton("NaN status")
@@ -414,7 +393,6 @@ class PreviewWidget(QWidget):
         self.btn_delete.setFixedSize(140, 28)
         self.btn_delete.clicked.connect(self.open_delete_columns_dialog)
         filter_layout.addWidget(self.btn_delete)
-
 
         # 📐 Formula Menu
         self.btn_formula_menu = QToolButton()
@@ -433,19 +411,18 @@ class PreviewWidget(QWidget):
 
         filter_layout.addWidget(self.btn_formula_menu)
 
-
         # 👉 Nút Export
         self.btn_export = QPushButton("💾 Export")
         self.btn_export.setFixedSize(120, 28)
         self.btn_export.clicked.connect(self.export_data)
 
-        filter_layout.addWidget(self.btn_export)  # Thêm nút vào cùng hàng với filter
+        filter_layout.addWidget(self.btn_export)
 
-        filter_layout.addStretch() # Thêm khoảng trống bên phải để đẩy các nút sang trái
+        filter_layout.addStretch()
         # 👉 Bảng dữ liệu
         self.table = QTableView()
-        self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)  # 👈 dòng quan trọng!
-        self.model = PandasModel(self.df_full)  # Hiển thị ban đầu chỉ 100 dòng
+        self.table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.model = PandasModel(self.df_full)
         self.table.setModel(self.model)
         self.table.setSortingEnabled(True)
         self.table.resizeColumnsToContents()
@@ -459,8 +436,6 @@ class PreviewWidget(QWidget):
         # Cập nhật model và table
         self.model = PandasModel(filtered_df)
         self.table.setModel(self.model)
-
-        # 👉 Nếu muốn tự động resize cột sau khi lọc:
         self.table.resizeColumnsToContents()
 
     def open_formula_dialog(self):
@@ -479,34 +454,20 @@ class PreviewWidget(QWidget):
                 self.parent().parent_main_window.set_final_df(updated_df)
             self.update_table()
 
-
-
-    #def update_table(self):
-        #if self.start_time and self.end_time:
-            #start = self.start_time.dateTime().toPython()
-           # end = self.end_time.dateTime().toPython()
-           # filtered_df = filter_dataframe_by_datetime(self.df_full, start, end)
-        #else:
-            #filtered_df = self.df_full  # 👉 Nếu không có filter, hiển thị toàn bộ
-
-
     def open_cleaning_dialog(self):
         main_window = self.parent()
         if hasattr(main_window, "parent_main_window"):
-            main_window = main_window.parent_main_window  # đảm bảo lấy đúng MainWindow
+            main_window = main_window.parent_main_window
 
         dialog = DataCleaningDialog(main_window)
         if dialog.exec():
             cleaned_df = dialog.get_cleaned_data()
             if cleaned_df is not None:
-                # ✅ Gán lại dữ liệu và cập nhật
                 self.df_full = cleaned_df
                 if hasattr(main_window, "set_final_df"):
                     main_window.set_final_df(cleaned_df, folder_name=self.df_key)
                 self.update_table()
 
-
-                # ✅ Gửi dữ liệu mới về MainWindow
                 if hasattr(self.parent(), "parent_main_window"):
                     self.parent().parent_main_window.set_final_df(cleaned_df, folder_name=self.df_key)
 
@@ -535,7 +496,6 @@ class PreviewWidget(QWidget):
             elif file_path.endswith(".xlsx"):
                 self.model._df.to_excel(file_path, index=False, engine='openpyxl')
             else:
-                # Mặc định xuất CSV nếu không rõ
                 self.model._df.to_csv(file_path, index=False)
             QMessageBox.information(self, "Thành công", f"Đã lưu dữ liệu vào:\n{file_path}")
         except Exception as e:
@@ -546,8 +506,8 @@ class PreviewWidget(QWidget):
         dialog = DeleteColumnsDialog(self)
         if dialog.exec():
             self.update_table()
+
     def open_nan_status_dialog(self):
-        # 1. Kiểm tra có df_full hay chưa
         if self.df_full is None or self.df_full.empty:
             QMessageBox.warning(
                 self,
@@ -556,17 +516,14 @@ class PreviewWidget(QWidget):
             )
             return
 
-        # 2. Mở dialog thống kê NaN
         dialog = NaNStatusDialog(self.df_full, self)
         if dialog.exec():
             cleaned_df = dialog.get_cleaned_df()
             if cleaned_df is None:
                 return
 
-            # 3. Cập nhật df_full bằng bản đã xóa NaN
             self.df_full = cleaned_df
 
-            # 4. Cập nhật final_df cho MainWindow (Tab ML dùng)
             main_window = self.parent()
             if hasattr(main_window, "parent_main_window"):
                 main_window = main_window.parent_main_window
@@ -574,5 +531,4 @@ class PreviewWidget(QWidget):
             if main_window is not None and hasattr(main_window, "set_final_df"):
                 main_window.set_final_df(cleaned_df, folder_name=self.df_key)
 
-            # 5. Cập nhật bảng hiển thị theo filter thời gian hiện tại
             self.update_table()

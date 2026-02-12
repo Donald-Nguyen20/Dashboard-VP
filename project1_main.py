@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtWidgets import QMenu
 from PySide6.QtWidgets import QLineEdit
 from PySide6.QtCore import Qt
-from project1_main_tab.load_data import CsvCleanerWidget  # nếu bạn lưu widget trên ở file csv_cleaner_widget.py
+from project1_main_tab.load_data import CsvCleanerWidget
 from project1_main_tab.plot_tab import PlotTab
 from matplotlib.backends.backend_qt5 import NavigationToolbar2QT as NavigationToolbar
 from project1_main_tab.drift_tab import DriftMonitorTab
@@ -47,7 +47,7 @@ class MainWindow(QMainWindow):
         self.scroll_content.setContextMenuPolicy(Qt.CustomContextMenu)
         self.scroll_content.customContextMenuRequested.connect(self.show_folder_context_menu)
 
-        self.scroll_content.setStyleSheet("background: #afcbff;")   # Hồng nhạt pastel, hoặc màu bạn muốn #afcbff: xanh nhạt pastel, #fbd6e3 #e8bddb Hồng nhạt pastel
+        self.scroll_content.setStyleSheet("background: #afcbff;")
 
         # ===== Thêm ô tìm kiếm folder
         self.search_box = QLineEdit()
@@ -55,20 +55,20 @@ class MainWindow(QMainWindow):
         self.search_box.setClearButtonEnabled(True)
         self.search_box.setStyleSheet("""
             QLineEdit {
-    background-color: #1a1c29;        /* Nền block đen sang trọng */
-    color: #e0e3f0;                   /* Màu chữ trắng xanh AI */
-    border: 1px solid #2a2e45;        /* Viền trung tính hiện đại */
+    background-color: #1a1c29;
+    color: #e0e3f0;
+    border: 1px solid #2a2e45;
     border-radius: 5px;
     padding-left: 10px;
     font-size: 14px;
     margin-bottom: 8px;
 }
 QLineEdit:hover {
-    border: 1.2px solid #00bcd4;      /* Hover sáng nhẹ cyan */
+    border: 1.2px solid #00bcd4;
 }
 QLineEdit:focus {
-    border: 1.5px solid #8c5eff;      /* Khi focus: ánh tím hiện đại */
-    background-color: #0f111a;        /* Tối hơn tạo chiều sâu */
+    border: 1.5px solid #8c5eff;
+    background-color: #0f111a;
 }
 
         """)
@@ -81,9 +81,9 @@ QLineEdit:focus {
 
         self.btn_load_data.setStyleSheet("""
             QPushButton {
-    background-color: #1a1c29;         /* Nền block tối sang trọng */
-    color: #00bcd4;                    /* Chữ xanh cyan nổi bật */
-    border: 1px solid #2a2e45;         /* Viền tinh tế */
+    background-color: #1a1c29;
+    color: #00bcd4;
+    border: 1px solid #2a2e45;
     border-radius: 6px;
     font-weight: bold;
     font-size: 13px;
@@ -94,9 +94,9 @@ QLineEdit:focus {
                                          
 }
 QPushButton:hover {
-    background-color: #1d2b4f;         /* Hover chuyển navy ánh tím */
-    color: #8c5eff;                    /* Chữ tím ánh điện */
-    border: 1px solid #8c5eff;         /* Viền tím nhấn mạnh */
+    background-color: #1d2b4f;
+    color: #8c5eff;
+    border: 1px solid #8c5eff;
 }
 QPushButton:pressed {
     background-color: #8c5eff;
@@ -120,17 +120,16 @@ QPushButton:pressed {
         self.cb_date_format = QComboBox(date_row)
         self.cb_date_format.setObjectName("cbDateFormat")
 
-        # 🔹 Sửa / thêm 2 item như sau:
         self.cb_date_format.addItem(
-            "dd/MM/yyyy",    # VN – 24h
+            "dd/MM/yyyy",
             {"dayfirst": True, "fmt": "%d/%m/%Y %H:%M:%S"}
         )
         self.cb_date_format.addItem(
-            "MM/dd/yyyy",   # US – 12h + AM/PM
+            "MM/dd/yyyy",
             {"dayfirst": False, "fmt": "%m/%d/%Y %I:%M:%S %p"}
         )
 
-        self.cb_date_format.setCurrentIndex(0)   # mặc định VN
+        self.cb_date_format.setCurrentIndex(0)
         self.cb_date_format.setFixedWidth(90)
         date_row.setMaximumWidth(150)  
 
@@ -161,10 +160,10 @@ QPushButton:pressed {
         refresh_action = menu.addAction("🔄 Refresh")
         action = menu.exec(global_pos)
         if action == refresh_action:
-            # Giữ lại text search hiện tại (nếu có)
             filter_text = self.search_box.text()
             self.load_folders(filter_text)
-    def set_final_df(self, df, folder_name="MergedData"): # truyền dữ liệu đến các hàm chức năng khác
+
+    def set_final_df(self, df, folder_name="MergedData"):
         if not hasattr(self, "dataframes"):
             self.dataframes = {}
         self.dataframes[folder_name] = df
@@ -196,7 +195,6 @@ QPushButton:pressed {
         return []
 
     def get_df_by_name(self, name: str):
-        # name là tên folder hoặc "MergedData"
         if hasattr(self, "dataframes") and name in self.dataframes:
             return self.dataframes[name]
         if name.startswith("MergedData"):
@@ -222,7 +220,7 @@ QPushButton:pressed {
                 widget.setParent(None)
             else:
                 item = self.scroll_layout.itemAt(i)
-                self.scroll_layout.removeItem(item)  # Xóa stretch cũ nếu có
+                self.scroll_layout.removeItem(item)
 
         base_path = app_dir()
         matched_count = 0
@@ -251,7 +249,6 @@ QPushButton:pressed {
                 btn.clicked.connect(lambda _, name=folder.name: self.open_folder(name))
                 self.scroll_layout.addWidget(btn)
                 matched_count += 1
-        # Chỉ addStretch nếu có hơn 0 folder (tránh lề dưới)
         if matched_count > 0:
             self.scroll_layout.addStretch()
 
@@ -289,5 +286,4 @@ QPushButton:pressed {
         # Tab 5 - Analysis Report
         self.analysis_report_tab = AnalysisReportTab(parent=self)
         self.tab_widget.addTab(self.analysis_report_tab, "📊 Analysis Report")
-
 

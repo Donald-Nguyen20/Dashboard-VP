@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QPushButton, QDialog, QDialogButtonBox,
-    QCheckBox, QLabel, QHBoxLayout, QMessageBox, QComboBox, QScrollArea
+    QCheckBox, QLabel, QHBoxLayout, QMessageBox, QComboBox, QScrollArea, QSpinBox
 )
 from PySide6.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -11,9 +11,6 @@ import numpy as np
 from PySide6.QtWidgets import QDateTimeEdit
 from PySide6.QtCore import QDateTime
 from PySide6.QtWidgets import QLineEdit
-
-
-
 
 
 IGNORED_COLUMNS = {'datetime', 'date', 'time', 'sourcefolder'}
@@ -39,7 +36,7 @@ class VariableSelectorDialog(QDialog):
             cb.setChecked(col in self.selected_vars)
             checkbox_layout.addWidget(cb)
             self.checkboxes.append(cb)
-        checkbox_layout.addStretch()  # Đẩy các checkbox lên trên
+        checkbox_layout.addStretch()
 
         # Gắn vào QScrollArea
         scroll = QScrollArea()
@@ -65,8 +62,6 @@ class VariableSelectorDialog(QDialog):
         btn_box.rejected.connect(self.reject)
         layout.addWidget(btn_box)
 
-
-
     def get_selected_variables(self):
         return [cb.text() for cb in self.checkboxes if cb.isChecked()]
     
@@ -78,7 +73,90 @@ class VariableSelectorDialog(QDialog):
         for cb in self.checkboxes:
             cb.setChecked(False)
 
-from project1_main_tab.Plot_modules.scatter_chart import plot_scatter_chart
+
+class MultiRangeDialog(QDialog):
+    """Dialog để nhập nhiều khoảng thời gian cho Bar chart comparison"""
+    def __init__(self, num_ranges=2, df=None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Chọn khoảng thời gian cho từng Range")
+        self.num_ranges = num_ranges
+        self.date_pickers = []
+        
+        # Calculate default date ranges (3 days each, going backwards)
+        default_ranges = self._calculate_default_ranges(df, num_ranges)
+        
+        layout = QVBoxLayout(self)
+        
+        for i in range(num_ranges):
+            # Row for each range
+            row_layout = QHBoxLayout()
+            row_layout.addWidget(QLabel(f"Range {i+1}:"))
+            
+            # Start date
+            start_edit = QDateTimeEdit()
+            start_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
+            start_edit.setCalendarPopup(True)
+            if default_ranges[i] is not None:
+                start_edit.setDateTime(default_ranges[i][0])
+            row_layout.addWidget(QLabel("From:"))
+            row_layout.addWidget(start_edit)
+            
+            # End date
+            end_edit = QDateTimeEdit()
+            end_edit.setDisplayFormat("yyyy-MM-dd HH:mm")
+            end_edit.setCalendarPopup(True)
+            if default_ranges[i] is not None:
+                end_edit.setDateTime(default_ranges[i][1])
+            row_layout.addWidget(QLabel("To:"))
+            row_layout.addWidget(end_edit)
+            
+            self.date_pickers.append((start_edit, end_edit))
+            layout.addLayout(row_layout)
+        
+        # Buttons
+        btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btn_box.accepted.connect(self.accept)
+        btn_box.rejected.connect(self.reject)
+        layout.addWidget(btn_box)
+        
+        self.setMinimumWidth(800)
+    
+    def _calculate_default_ranges(self, df, num_ranges):
+        """Calculate default date ranges (3 days each, going backwards from most recent)"""
+        if df is None or df.empty or 'Datetime' not in df.columns:
+            from datetime import datetime, timedelta
+            # Fallback: use current time
+            now = datetime.now()
+            ranges = []
+            for i in range(num_ranges):
+                end = now - timedelta(days=i*3)
+                start = end - timedelta(days=3)
+                ranges.append((start, end))
+            return ranges
+        
+        from datetime import timedelta
+        max_date = pd.to_datetime(df['Datetime']).max()
+        ranges = []
+        
+        for i in range(num_ranges):
+            # Calculate start and end for this range (3 days each)
+            range_end = max_date - timedelta(days=i*3)
+            range_start = range_end - timedelta(days=3)
+            ranges.append((range_start, range_end))
+        
+        return ranges
+    
+    def get_ranges(self):
+        """Returns list of (start_datetime, end_datetime) tuples"""
+        ranges = []
+        for start_edit, end_edit in self.date_pickers:
+            start_dt = start_edit.dateTime().toPython()
+            end_dt = end_edit.dateTime().toPython()
+            ranges.append((start_dt, end_dt))
+        return ranges
+
+
+
 from project1_main_tab.Plot_modules.line_chart import plot_line_chart
 from project1_main_tab.Plot_modules.plot_modified_zscore_scatter import plot_modified_zscore_scatter
 from project1_main_tab.Plot_modules.heatmap_correlation import HeatmapDialog
@@ -88,9 +166,7 @@ from project1_main_tab.Plot_modules.hist_box_chart import plot_hist_box_chart
 from project1_main_tab.Plot_modules.violin_chart import plot_violin_chart
 from project1_main_tab.Plot_modules.boxen_chart import plot_boxenplot_chart
 from project1_main_tab.Plot_modules.pairplot_chart import plot_pairplot_chart
-
-
-
+from project1_main_tab.Plot_modules.bar_chart import plot_bar_chart
 
 
 class PlotTab(QWidget):
@@ -115,11 +191,31 @@ class PlotTab(QWidget):
         control_layout.addWidget(self.btn_select_vars)
 
         self.chart_type_combo = QComboBox()
-        self.chart_type_combo.addItems(["Line", "Scatter", "Z-score Scatter", "Heatmap Correlation", 
-                                        "Histogram", "Boxplot", "Histogram + Boxplot", 
-                                        "Violin", "Boxen","Pairplot"])
+        self.chart_type_combo.addItems(["Line", "Scatter", "Bar", "Z-score Scatter", "Heatmap Correlation", 
+                "Histogram", "Boxplot", "Histogram + Boxplot", 
+                "Violin", "Boxen","Pairplot"])
         control_layout.addWidget(QLabel("Plot:"))
         control_layout.addWidget(self.chart_type_combo)
+
+        # Color picker for Bar only (hidden until Bar is selected)
+        self.btn_color = QPushButton("🎨 Bar Color")
+        self.btn_color.clicked.connect(lambda: self._choose_color())
+        # default color for bars
+        self.bar_color = "#1976d2"
+        self.btn_color.setVisible(False)
+        control_layout.addWidget(self.btn_color)
+
+        # Range spinbox for Bar chart (hidden until Bar is selected)
+        self.bar_range_spin = QSpinBox()
+        self.bar_range_spin.setMinimum(1)
+        self.bar_range_spin.setMaximum(10)
+        self.bar_range_spin.setValue(1)
+        self.bar_range_spin.setVisible(False)
+        control_layout.addWidget(QLabel("Range:"))
+        control_layout.addWidget(self.bar_range_spin)
+
+        # show/hide color button and range spinbox when chart type changes
+        self.chart_type_combo.currentTextChanged.connect(self._on_chart_type_changed)
 
         self.btn_plot = QPushButton("🌐 Select")
         self.btn_plot.clicked.connect(self.plot_selected_variables)
@@ -134,8 +230,8 @@ class PlotTab(QWidget):
         layout.addWidget(self.canvas)
         self.ax = self.canvas.figure.add_subplot(111)
 
-        self.toolbar = NavigationToolbar(self.canvas, self)  # ✅ Đặt sau khi self.canvas đã được khởi tạo
-        layout.addWidget(self.toolbar)  # có thể đặt trước hoặc sau canvas tùy bạn muốn
+        self.toolbar = NavigationToolbar(self.canvas, self)
+        layout.addWidget(self.toolbar)
         layout.addWidget(self.canvas)
 
         self.start_time_edit = QDateTimeEdit()
@@ -159,7 +255,7 @@ class PlotTab(QWidget):
         self.btn_scale.clicked.connect(self.open_scale_dialog)
         control_layout.addWidget(self.btn_scale)
 
-        self.scales = {}  # trong __init__ của PlotTab
+        self.scales = {}
 
     def open_scale_dialog(self):
         if not self.selected_vars:
@@ -169,7 +265,6 @@ class PlotTab(QWidget):
         if dlg.exec():
             self.scales = dlg.get_scales()
             self.plot_selected_variables()
-
 
     def update_variables(self, df: pd.DataFrame):
         self.df = df
@@ -216,14 +311,43 @@ class PlotTab(QWidget):
             self.selected_vars = dialog.get_selected_variables()
             self.plot_selected_variables()
 
+    def _choose_color(self):
+        from PySide6.QtWidgets import QColorDialog
+        col = QColorDialog.getColor()
+        if col.isValid():
+            # store as hex string
+            self.bar_color = col.name()
+            # trigger redraw to apply color
+            self.plot_selected_variables()
+
+    def _on_chart_type_changed(self, text: str):
+        # show the color picker and range spinbox only when 'Bar' is selected
+        try:
+            is_bar = text.lower() == 'bar'
+        except Exception:
+            is_bar = False
+        self.btn_color.setVisible(is_bar)
+        self.bar_range_spin.setVisible(is_bar)
+
     def plot_selected_variables(self):
         if not self.selected_vars:
             QMessageBox.information(self, "Thông báo", "Hãy chọn ít nhất 1 biến để vẽ.")
             return
-        self.figure.clear()         # Xóa toàn bộ các subplot/axes cũ
-        self.ax = self.figure.add_subplot(111)  # Tạo lại 1 axes mặc định cho các plot khác
+        self.figure.clear()
+        self.ax = self.figure.add_subplot(111)
 
-            # ⏳ Lọc theo khoảng thời gian đã chọn
+        chart_type = self.chart_type_combo.currentText().lower()
+        
+        # Special handling for Bar chart with multiple ranges
+        if chart_type == "bar" and self.bar_range_spin.value() > 1:
+            num_ranges = self.bar_range_spin.value()
+            dlg = MultiRangeDialog(num_ranges, df=self.df, parent=self)
+            if dlg.exec():
+                time_ranges = dlg.get_ranges()
+                plot_bar_chart(self, self.df, time_ranges=time_ranges)
+            return
+        
+        # ⏳ Lọc theo khoảng thời gian đã chọn
         if 'Datetime' in self.df.columns:
             start_dt = self.start_time_edit.dateTime().toPython()
             end_dt = self.end_time_edit.dateTime().toPython()
@@ -234,12 +358,13 @@ class PlotTab(QWidget):
             ]
         else:
             df_filtered = self.df
-        chart_type = self.chart_type_combo.currentText().lower()
 
         if chart_type == "line":
             plot_line_chart(self, df_filtered)
         elif chart_type == "scatter":
             plot_scatter_chart(self, df_filtered)
+        elif chart_type == "bar":
+            plot_bar_chart(self, df_filtered)
         elif chart_type == "z-score scatter":
             plot_modified_zscore_scatter(self, df_filtered)
         elif chart_type == "heatmap correlation":
@@ -265,7 +390,6 @@ class PlotTab(QWidget):
             QMessageBox.warning(self, "Chưa hỗ trợ", f"Chưa hỗ trợ kiểu biểu đồ: {chart_type}")
 
 
-
 class SimpleScaleDialog(QDialog):
     def __init__(self, variables, scales=None, parent=None):
         super().__init__(parent)
@@ -275,12 +399,9 @@ class SimpleScaleDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        # Scroll area chứa danh sách biến (để không bị quá cao khi biến nhiều)
         scroll = QScrollArea(self)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        # Nếu muốn giới hạn chiều cao dialog:
-        # scroll.setMinimumHeight(250)
 
         container = QWidget()
         form_layout = QVBoxLayout(container)

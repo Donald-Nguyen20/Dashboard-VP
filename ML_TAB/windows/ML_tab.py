@@ -35,8 +35,8 @@ class ML_Tab(QMainWindow):
 
     def _apply_theme_from_files(self):
         """Đọc 2 file QSS (base + dark) và áp dụng."""
-        here = os.path.dirname(os.path.abspath(__file__))          # .../ML APP/windows
-        project_root = os.path.abspath(os.path.join(here, ".."))   # .../ML APP
+        here = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.abspath(os.path.join(here, ".."))
 
         base_path  = os.path.join(project_root, "assets", "qss", "base.qss")
         theme_path = os.path.join(project_root, "assets", "qss", "dark.qss")
