@@ -4,16 +4,69 @@ import pandas as pd
 import numpy as np
 
 
-def _annotate_bars(ax, rects, labels=None, fmt="{:.2f}"):
-    """Helper to annotate bars with given labels or their heights."""
+def _hex_to_rgb(hex_color):
+    """Convert hex color to RGB tuple (0-1 range)"""
+    hex_color = hex_color.lstrip('#')
+    return tuple(int(hex_color[i:i+2], 16)/255.0 for i in (0, 2, 4))
+
+
+def _rgb_to_hex(rgb):
+    """Convert RGB tuple (0-1 range) to hex color"""
+    return '#{:02x}{:02x}{:02x}'.format(int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255))
+
+
+def _lighten_color(hex_color, amount=0.3):
+    """Lighten a hex color by blending with white"""
+    rgb = _hex_to_rgb(hex_color)
+    # Blend towards white (1, 1, 1)
+    lightened = tuple(min(1.0, c + (1 - c) * amount) for c in rgb)
+    return lightened
+
+
+def _lighter_color(base_color, n_ranges):
+    """Generate n_ranges of progressively lighter shades of base_color"""
+    if base_color is None:
+        base_color = "#1976d2"  # default
+    
+    colors = []
+    for i in range(n_ranges):
+        # Create progressively lighter shades
+        amount = i * (0.7 / max(1, n_ranges - 1))  # 0 to 0.7 lightening
+        color = _lighten_color(base_color, amount)
+        colors.append(color)
+    return colors
+
+
+def _annotate_bars(ax, rects, labels=None, fmt="{:.2f}", num_vars=1):
+    """Helper to annotate bars with given labels or their heights.
+    Font size scales with bar width and number of variables."""
+    if not rects:
+        return
+    
+    # Find the max bar width to normalize font sizing
+    max_width = max(rect.get_width() for rect in rects)
+    
+    # Scale base font size inversely with number of variables
+    # More vars = smaller font, fewer vars = larger font
+    base_font = max(6, 12 - (num_vars - 1) * 0.5)  # ranges from 12 down
+    
     for i, rect in enumerate(rects):
         h = rect.get_height()
         if labels is not None:
             text = fmt.format(labels[i])
         else:
             text = fmt.format(h)
+        
+        # Scale font size based on bar width (relative to max_width)
+        if max_width > 0:
+            width_ratio = rect.get_width() / max_width
+            font_size = max(6, min(base_font, base_font * width_ratio * 1.2))
+        else:
+            font_size = base_font
+        
         ax.text(rect.get_x() + rect.get_width() / 2, h, text,
-                ha='center', va='bottom', fontsize=8, rotation=0)
+                ha='center', va='bottom', fontsize=font_size, rotation=0)
+
 
 
 def plot_bar_chart(plot_tab, df: pd.DataFrame, time_ranges=None):
@@ -61,7 +114,9 @@ def plot_bar_chart(plot_tab, df: pd.DataFrame, time_ranges=None):
         indices = np.arange(n_vars)
         width = 0.8 / max(1, n_ranges)
         
-        colors_palette = plt.cm.Set2(np.linspace(0, 1, n_ranges))
+        # Get base color from plot_tab, generate lighter shades
+        base_color = getattr(plot_tab, 'bar_color', None)
+        colors_palette = _lighter_color(base_color, n_ranges)
         
         for r_idx, range_info in enumerate(range_data):
             heights = range_info['maxs'].values
@@ -69,7 +124,7 @@ def plot_bar_chart(plot_tab, df: pd.DataFrame, time_ranges=None):
                           label=range_info['label'], color=colors_palette[r_idx])
             # Annotate with max values on top
             max_vals = range_info['maxs'].values
-            _annotate_bars(ax, rects, labels=max_vals, fmt="{:.2f}")
+            _annotate_bars(ax, rects, labels=max_vals, fmt="{:.2f}", num_vars=n_vars)
         
         ax.set_xticks(indices + width * (n_ranges - 1) / 2)
         ax.set_xticklabels(vars, rotation=30 if len(vars) > 3 else 0)
@@ -104,7 +159,7 @@ def plot_bar_chart(plot_tab, df: pd.DataFrame, time_ranges=None):
             rects = ax.bar(x, y)
         # annotate with daily max values
         max_vals = max_series.values
-        _annotate_bars(ax, rects, labels=max_vals, fmt="{:.2f}")
+        _annotate_bars(ax, rects, labels=max_vals, fmt="{:.2f}", num_vars=1)
 
         ax.set_title(f"Bar: {col} (daily)")
         ax.set_xlabel('Datetime')
@@ -140,7 +195,7 @@ def plot_bar_chart(plot_tab, df: pd.DataFrame, time_ranges=None):
             rects = ax.bar(indices + i * width, heights, **kw)
             # annotate using grouped_max
             max_vals = grouped_max[var].values
-            _annotate_bars(ax, rects, labels=max_vals, fmt="{:.2f}")
+            _annotate_bars(ax, rects, labels=max_vals, fmt="{:.2f}", num_vars=n_vars)
 
         ax.set_xticks(indices + width * (n_vars - 1) / 2)
         ax.set_xticklabels(categories, rotation=30)
@@ -157,7 +212,7 @@ def plot_bar_chart(plot_tab, df: pd.DataFrame, time_ranges=None):
         rects = ax.bar(vars, means.values, color=color)
     else:
         rects = ax.bar(vars, means.values)
-    _annotate_bars(ax, rects, labels=maxs.values, fmt="{:.2f}")
+    _annotate_bars(ax, rects, labels=maxs.values, fmt="{:.2f}", num_vars=len(vars))
     ax.set_title('Mean value per variable')
     ax.set_ylabel('Mean')
     plot_tab.canvas.draw()

@@ -11,7 +11,8 @@ import numpy as np
 from PySide6.QtWidgets import QDateTimeEdit
 from PySide6.QtCore import QDateTime
 from PySide6.QtWidgets import QLineEdit
-
+from PySide6.QtCore import Signal
+from Monitoring.plot_binding.plot_spec import PlotSpec
 
 IGNORED_COLUMNS = {'datetime', 'date', 'time', 'sourcefolder'}
 
@@ -158,6 +159,7 @@ class MultiRangeDialog(QDialog):
 
 
 from project1_main_tab.Plot_modules.line_chart import plot_line_chart
+from project1_main_tab.Plot_modules.scatter_chart import plot_scatter_chart
 from project1_main_tab.Plot_modules.plot_modified_zscore_scatter import plot_modified_zscore_scatter
 from project1_main_tab.Plot_modules.heatmap_correlation import HeatmapDialog
 from project1_main_tab.Plot_modules.histogram_chart import plot_histogram_chart
@@ -170,8 +172,11 @@ from project1_main_tab.Plot_modules.bar_chart import plot_bar_chart
 
 
 class PlotTab(QWidget):
+    plotSpecChanged = Signal(object)
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._current_plot_spec = None
+        self._last_time_ranges = None
         self.parent_main_window = parent
         self.df = pd.DataFrame()
         self.selected_vars = []
@@ -205,14 +210,14 @@ class PlotTab(QWidget):
         self.btn_color.setVisible(False)
         control_layout.addWidget(self.btn_color)
 
-        # Range spinbox for Bar chart (hidden until Bar is selected)
-        self.bar_range_spin = QSpinBox()
-        self.bar_range_spin.setMinimum(1)
-        self.bar_range_spin.setMaximum(10)
-        self.bar_range_spin.setValue(1)
-        self.bar_range_spin.setVisible(False)
+        # Range spinbox for Bar/Line charts (hidden until Bar/Line is selected)
+        self.range_spin = QSpinBox()
+        self.range_spin.setMinimum(1)
+        self.range_spin.setMaximum(10)
+        self.range_spin.setValue(1)
+        self.range_spin.setVisible(False)
         control_layout.addWidget(QLabel("Range:"))
-        control_layout.addWidget(self.bar_range_spin)
+        control_layout.addWidget(self.range_spin)
 
         # show/hide color button and range spinbox when chart type changes
         self.chart_type_combo.currentTextChanged.connect(self._on_chart_type_changed)
@@ -321,13 +326,15 @@ class PlotTab(QWidget):
             self.plot_selected_variables()
 
     def _on_chart_type_changed(self, text: str):
-        # show the color picker and range spinbox only when 'Bar' is selected
+        # show the color picker and range spinbox when selected chart type
         try:
             is_bar = text.lower() == 'bar'
+            is_line = text.lower() == 'line'
         except Exception:
             is_bar = False
+            is_line = False
         self.btn_color.setVisible(is_bar)
-        self.bar_range_spin.setVisible(is_bar)
+        self.range_spin.setVisible(is_bar or is_line)
 
     def plot_selected_variables(self):
         if not self.selected_vars:
@@ -338,13 +345,20 @@ class PlotTab(QWidget):
 
         chart_type = self.chart_type_combo.currentText().lower()
         
-        # Special handling for Bar chart with multiple ranges
-        if chart_type == "bar" and self.bar_range_spin.value() > 1:
-            num_ranges = self.bar_range_spin.value()
+        # Special handling for Bar/Line chart with multiple ranges
+        if (chart_type == "bar" or chart_type == "line") and self.range_spin.value() > 1:
+            num_ranges = self.range_spin.value()
             dlg = MultiRangeDialog(num_ranges, df=self.df, parent=self)
             if dlg.exec():
                 time_ranges = dlg.get_ranges()
-                plot_bar_chart(self, self.df, time_ranges=time_ranges)
+                self._last_time_ranges = time_ranges
+
+                if chart_type == "bar":
+                    plot_bar_chart(self, self.df, time_ranges=time_ranges)
+                else:
+                    plot_line_chart(self, self.df, time_ranges=time_ranges)
+
+                self._publish_plot_spec(chart_type)  # ✅ đặt vào trong if
             return
         
         # ⏳ Lọc theo khoảng thời gian đã chọn
@@ -385,11 +399,45 @@ class PlotTab(QWidget):
             plot_boxenplot_chart(self, df_filtered)
         elif chart_type == "pairplot":
             plot_pairplot_chart(self, df_filtered)
-
+        
         else:
             QMessageBox.warning(self, "Chưa hỗ trợ", f"Chưa hỗ trợ kiểu biểu đồ: {chart_type}")
+       # ✅ thêm
+        if chart_type in ("line", "scatter", "bar"):
+            self._last_time_ranges = None
+            self._publish_plot_spec(chart_type)
+    def get_current_plot_spec(self):
+        """Monitoring sẽ gọi hàm này để lấy cấu hình plot hiện tại (dict)."""
+        return self._current_plot_spec
 
+    def _publish_plot_spec(self, chart_type: str):
+        """Gói cấu hình plot hiện tại thành PlotSpec -> dict và phát signal."""
+        # 1) single range (nếu UI có start/end)
+        start_iso = None
+        end_iso = None
+        if hasattr(self, "start_time_edit") and hasattr(self, "end_time_edit"):
+            start_iso = self.start_time_edit.dateTime().toPython().isoformat()
+            end_iso = self.end_time_edit.dateTime().toPython().isoformat()
 
+        # 2) multi-range (nếu có)
+        time_ranges_iso = None
+        if self._last_time_ranges:
+            time_ranges_iso = [(a.isoformat(), b.isoformat()) for a, b in self._last_time_ranges]
+
+        # 3) lấy selected vars + hue + scales + bar_color từ PlotTab hiện tại
+        spec = PlotSpec(
+            chart_type=chart_type,
+            selected_vars=list(getattr(self, "selected_vars", [])),
+            hue=self.hue_combo.currentText() if hasattr(self, "hue_combo") else "❌ Không phân loại",
+            bar_color=getattr(self, "bar_color", None),
+            scales=dict(getattr(self, "scales", {}) or {}),
+            start_dt_iso=start_iso,
+            end_dt_iso=end_iso,
+            time_ranges_iso=time_ranges_iso,
+        )
+
+        self._current_plot_spec = spec.to_dict()
+        self.plotSpecChanged.emit(self._current_plot_spec)
 class SimpleScaleDialog(QDialog):
     def __init__(self, variables, scales=None, parent=None):
         super().__init__(parent)

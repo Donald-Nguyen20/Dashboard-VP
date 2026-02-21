@@ -6,6 +6,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget, QPushButton
 from project1_main import MainWindow
 from ML_TAB.windows.ML_tab import ML_Tab
+from Monitoring.windows.monitoring_tab import Monitoring_Tab
 
 
 def app_dir():
@@ -224,15 +225,24 @@ class MasterWindow(QMainWindow):
         self.tab_widget = QTabWidget()
         self.setCentralWidget(self.tab_widget)
 
-        main_window = MainWindow()
-        widget = main_window.centralWidget()
+        # Giữ tham chiếu main_window để df_provider luôn truy cập được final_df
+        self.main_window = MainWindow()
+        widget = self.main_window.centralWidget()
         self.tab_widget.addTab(widget, "📊 Data Analyzing")
 
         # Tab 2: ML Application (từ windows/ML_tab.py)
-        ml_win = ML_Tab(df_provider=main_window.get_current_df_for_ml)
+        ml_win = ML_Tab(df_provider=self.main_window.get_current_df_for_ml)
         ml_widget = ml_win.centralWidget()
         ml_widget.setStyleSheet(ml_win.styleSheet())
         self.tab_widget.addTab(ml_widget, "🤖 ML Application")
+
+        # Tab 3: Monitoring System (truyền df_provider để lấy dữ liệu từ Data Analyzing)
+        monitoring_win = Monitoring_Tab(
+            df_provider=self.main_window.get_current_df_for_ml,
+            plot_provider=lambda: getattr(self.main_window, "tab2", None),
+        )
+        monitoring_widget = monitoring_win.centralWidget()
+        self.tab_widget.addTab(monitoring_widget, "📡 Monitoring System")
 
     def add_new_project_tab(self):
         main_window = MainWindow()
