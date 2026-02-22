@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Optional
 from PySide6.QtWidgets import QFrame, QVBoxLayout, QTextEdit, QLabel
 from PySide6.QtCore import Qt
-
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QMenu
 
 class TextCellWidget(QFrame):
     """Ô nhập text đánh giá / ghi chú."""
@@ -42,3 +43,10 @@ class TextCellWidget(QFrame):
         action = menu.exec(self.mapToGlobal(pos))
         if action == act_clear and hasattr(self, "on_clear"):
             self.on_clear()
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        act_clear = menu.addAction("🧹 Clear / Remove this cell")
+        action = menu.exec(event.globalPos())
+        if action == act_clear:
+            if hasattr(self, "on_clear") and callable(self.on_clear):
+                self.on_clear()

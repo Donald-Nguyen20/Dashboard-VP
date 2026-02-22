@@ -11,6 +11,7 @@ class PlaceholderCell(QFrame):
     """Ô trống có thể right-click: Get Plot | Note."""
     get_plot_requested = Signal(int, int)  # row, col
     note_requested = Signal(int, int)
+    selected = Signal(int, int)  # row, col (để chọn hàng đang thao tác)
 
     def __init__(self, row: int, col: int, parent: Optional[QFrame] = None):
         super().__init__(parent)
@@ -53,3 +54,8 @@ class PlaceholderCell(QFrame):
             self.get_plot_requested.emit(self.row, self.col)
         elif action == act_note:
             self.note_requested.emit(self.row, self.col)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.selected.emit(self.row, self.col)
+        super().mousePressEvent(event)

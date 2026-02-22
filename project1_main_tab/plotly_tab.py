@@ -1,19 +1,19 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QPushButton, QFormLayout, QSplitter, QDateTimeEdit,
-    QMessageBox, QDialog, QDialogButtonBox, QCheckBox, QScrollArea
+    QPushButton, QDateTimeEdit,
+    QMessageBox, QDialog, QDialogButtonBox, QCheckBox, QScrollArea,
+    QSizePolicy
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtCore import Qt, QDateTime
+from PySide6.QtCore import Qt, QDateTime, QUrl
 import pandas as pd
 import plotly.io as pio
-import plotly.graph_objs as go
-
-
-from project1_main_tab.Plotly_modules.plotly_scatter2d import plotly_scatter2d
+import tempfile
 from project1_main_tab.Plotly_modules.plotly_line_chart import plotly_line_chart
-
+from project1_main_tab.Plotly_modules.plotly_scatter2d import plotly_scatter2d
+from project1_main_tab.Plotly_modules.plotly_bar_max import plotly_bar_max
 IGNORED_COLUMNS = {'datetime', 'date', 'time', 'sourcefolder'}
+
 
 class VariableSelectorDialog(QDialog):
     def __init__(self, columns, selected_vars=None, parent=None):
@@ -24,6 +24,7 @@ class VariableSelectorDialog(QDialog):
 
         layout = QVBoxLayout(self)
         self.setMinimumSize(400, 800)
+
         checkbox_widget = QWidget()
         checkbox_layout = QVBoxLayout(checkbox_widget)
         checkbox_layout.setContentsMargins(4, 4, 4, 4)
@@ -69,17 +70,26 @@ class VariableSelectorDialog(QDialog):
         for cb in self.checkboxes:
             cb.setChecked(False)
 
+
 class PlotlyTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.df = pd.DataFrame()
         self.selected_vars = []
-        self.setLayout(QVBoxLayout())
 
-        # === Top controls
+        # ===== ROOT LAYOUT: full khung =====
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        # ===== Top controls =====
         topbar = QHBoxLayout()
+        topbar.setContentsMargins(6, 6, 6, 6)  # giữ chút padding cho thanh điều khiển
+        topbar.setSpacing(6)
+
         self.chart_type_combo = QComboBox()
-        self.chart_type_combo.addItems(["Scatter", "Line"])
+        self.chart_type_combo.addItems(["Line", "Bar (Max)", "Scatter"])
+
         self.btn_variable = QPushButton("🧩 Variable")
         self.btn_variable.clicked.connect(self.open_variable_dialog)
 
@@ -101,11 +111,16 @@ class PlotlyTab(QWidget):
         topbar.addWidget(self.end_time)
         topbar.addStretch()
         topbar.addWidget(btn_plot)
-        self.layout().addLayout(topbar)
 
-        # === Plot view
+        root.addLayout(topbar)
+
+        # ===== Plot view =====
         self.plot_view = QWebEngineView()
-        self.layout().addWidget(self.plot_view)
+        self.plot_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        root.addWidget(self.plot_view, 1)  # stretch=1 -> ăn hết phần còn lại
+
+        # (tuỳ chọn) zoom factor cho "đầy" hơn, anh chỉnh 1.0~1.2 theo ý
+        self.plot_view.setZoomFactor(1.0)
 
     def update_plot(self, df: pd.DataFrame):
         self.df = df.copy()
@@ -152,17 +167,66 @@ class PlotlyTab(QWidget):
             QMessageBox.warning(self, "Không có dữ liệu", "Không có dữ liệu trong khoảng thời gian.")
             return
 
-        fig = None
         if chart_type == "Scatter":
+            # hiện tại logic scatter của anh đang ghi đè fig; để nguyên theo yêu cầu
+            fig = None
             for i in range(len(self.selected_vars) - 1):
-                fig = plotly_scatter2d(df_filtered, self.selected_vars[i], self.selected_vars[i+1])
-        elif chart_type == "Line":
-            x = 'Datetime'
-            plotly_line_chart(df_filtered, x, self.selected_vars)  # tất cả biến gộp chung
+                fig = plotly_scatter2d(df_filtered, self.selected_vars[i], self.selected_vars[i + 1])
+
+            if fig is None:
+                return
+
+            # render nội bộ luôn (không cần file)
+            html = pio.to_html(fig, full_html=False, include_plotlyjs=True, config={"responsive": True})
+            self.plot_view.setHtml(html)
             return
 
+        elif chart_type == "Line":
+            x = 'Datetime'
+            fig = plotly_line_chart(df_filtered, x, self.selected_vars)
 
+            # file html tạm: ổn định hơn cho dữ liệu lớn
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+            plot_config = {
+                "responsive": True,
+                "displayModeBar": True,
+                "scrollZoom": True,
+                "displaylogo": False
+            }
 
-        if fig:
-            html = pio.to_html(fig, full_html=False, include_plotlyjs='cdn')
-            self.plot_view.setHtml(html)
+            pio.write_html(
+                fig,
+                file=tmp.name,
+                include_plotlyjs=True,
+                full_html=True,
+                auto_open=False,
+                config=plot_config
+            )
+            self.plot_view.load(QUrl.fromLocalFile(tmp.name))
+            return
+        elif chart_type == "Bar (Max)":
+
+            fig = plotly_bar_max(
+                df_filtered,
+                self.selected_vars,
+                title="Max value (within selected time range)"
+            )
+
+            plot_config = {
+                "responsive": True,
+                "displayModeBar": True,
+                "scrollZoom": True,
+                "displaylogo": False,
+            }
+
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+            pio.write_html(
+                fig,
+                file=tmp.name,
+                include_plotlyjs=True,
+                full_html=True,
+                auto_open=False,
+                config=plot_config
+            )
+            self.plot_view.load(QUrl.fromLocalFile(tmp.name))
+            return

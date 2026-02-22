@@ -8,7 +8,8 @@ from matplotlib.figure import Figure
 
 from Monitoring.plot_binding.plot_spec import PlotSpec
 from Monitoring.plot_binding.plot_renderer import render_plot
-
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QMenu
 class PlotBoundCell(QFrame):
     def __init__(self, plot_spec: dict, df_provider: Callable[[], pd.DataFrame | None], parent: Optional[QFrame] = None):
         super().__init__(parent)
@@ -34,3 +35,14 @@ class PlotBoundCell(QFrame):
             return
         spec = PlotSpec.from_dict(self.plot_spec)
         render_plot(self.ax, self.canvas, df, spec)
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        act_refresh = menu.addAction("🔄 Refresh (rebind plot)")
+        act_clear = menu.addAction("🧹 Clear / Remove this cell")
+        action = menu.exec(event.globalPos())
+        if action == act_refresh:
+            if hasattr(self, "on_refresh") and callable(self.on_refresh):
+                self.on_refresh()
+        elif action == act_clear:
+            if hasattr(self, "on_clear") and callable(self.on_clear):
+                self.on_clear()
