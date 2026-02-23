@@ -226,8 +226,13 @@ class SystemContentWidget(QWidget):
 
         max_cols = max(row_cols) if row_cols else 1
 
+        ROW_H = 450  # 280/320/360 tùy thích
+
         for r in range(rows):
             row_widget = QWidget()
+            row_widget.setMinimumHeight(ROW_H)
+            row_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+
             row_layout = QHBoxLayout(row_widget)
             row_layout.setContentsMargins(0, 0, 0, 0)
             row_layout.setSpacing(12)
@@ -240,16 +245,15 @@ class SystemContentWidget(QWidget):
                     ctype = cell_info.get("type", "note")
 
                     if ctype == "plot_bound":
-                        w = PlotBoundCell(
-                            plot_spec=cell_info.get("plot_spec", {}),
-                            df_provider=self.df_provider
-                        )
+                        w = PlotBoundCell(plot_spec=cell_info.get("plot_spec", {}), df_provider=self.df_provider)
                         w.on_clear = lambda row=r, col=c: self._on_clear_cell(row, col)
                         w.on_refresh = lambda row=r, col=c: self._on_refresh_plot_cell(row, col)
+
                     elif ctype == "plot_image":
                         w = PlotImageCell(image_base64=cell_info.get("image_base64", ""))
                         w.on_clear = lambda row=r, col=c: self._on_clear_cell(row, col)
                         w.on_refresh = lambda row=r, col=c: self._on_refresh_plot_image_cell(row, col)
+
                     elif ctype == "plotly_embed":
                         w = PlotlyEmbedCell(
                             html_content=cell_info.get("html_content", ""),
@@ -257,24 +261,33 @@ class SystemContentWidget(QWidget):
                         )
                         w.on_clear = lambda row=r, col=c: self._on_clear_cell(row, col)
                         w.on_refresh = lambda row=r, col=c: self._on_refresh_plotly_embed_cell(row, col)
+
                     else:
                         w = TextCellWidget(initial_text=cell_info.get("text_content", ""))
                         w.on_clear = lambda row=r, col=c: self._on_clear_cell(row, col)
 
                     self.cell_widgets[cell_id] = w
                     self.cell_pos[cell_id] = (r, c)
+
+                    w.setMinimumHeight(ROW_H)
+                    w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                     row_layout.addWidget(w, 1)
+
                 else:
                     ph = PlaceholderCell(r, c)
                     ph.get_plot_requested.connect(self._on_get_plot)
                     ph.note_requested.connect(self._on_note)
                     ph.selected.connect(self._on_cell_selected)
+
+                    ph.setMinimumHeight(ROW_H)
+                    ph.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                     row_layout.addWidget(ph, 1)
 
             self.rows_layout.addWidget(row_widget)
 
         min_w = max(400, max_cols * 320)
-        min_h = max(300, rows * 220)
+        # spacing=12, margins top+bottom = 8+8 = 16
+        min_h = max(300, rows * ROW_H + (rows - 1) * 12 + 16)
         self.grid_container.setMinimumSize(min_w, min_h)
 
     def _on_cell_selected(self, row: int, col: int) -> None:
@@ -509,22 +522,28 @@ class SystemContentWidget(QWidget):
             # 1) Temp folder
             temp_dir = os.path.join(tempfile.gettempdir(), "dashboard_reports")
             os.makedirs(temp_dir, exist_ok=True)
+            for fn in os.listdir(temp_dir):
+                if fn.lower().startswith("cell_") and fn.lower().endswith(".png"):
+                    try:
+                        os.remove(os.path.join(temp_dir, fn))
+                    except Exception:
+                        pass
 
             # 2) Chụp toàn bộ dashboard thành 1 ảnh lớn
             img_path = os.path.join(temp_dir, "cell_r1_c1.png")
-            save_widget_high_res(self.grid_container, img_path, scale_factor=4)  # 3 hoặc 4
+            save_widget_high_res(self.grid_container, img_path, scale_factor=3)  # 3 hoặc 4
 
             # 3) PDF config (A4 ngang sẽ fill tốt hơn với chart dài)
             from reportlab.lib.pagesizes import A4, landscape
             cfg = PdfLayoutConfig(
                 pagesize=landscape(A4),
                 split_tall_images=True,
-                title_on_first_page_only=True,
+                title_on_first_page_only=False,
                 always_full_width=True,
-                margin_left=8*mm,
-                margin_right=8*mm,
-                margin_top=8*mm,
-                margin_bottom=8*mm
+                margin_left=5*mm,
+                margin_right=5*mm,
+                margin_top=5*mm,
+                margin_bottom=5*mm
             )
 
             # 4) Export PDF
