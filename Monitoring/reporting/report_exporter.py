@@ -1,306 +1,423 @@
+# Monitoring/reporting/report_exporter.py
+# ============================================================
+# A4 PDF Export (Full-page layout) + auto-fit + auto-split tall images
+# - Fix LayoutError (image too tall)
+# - Make images fill A4 page as much as possible
+# - Optional: split very tall images into multiple pages (recommended)
+#
+# Requirements:
+#   py -3.13 -m pip install reportlab pillow python-docx
+# ============================================================
+
 from __future__ import annotations
-import base64
+
 import os
-import time
-import datetime as dt
-from typing import List, Optional
+import tempfile
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
-from PySide6.QtCore import QStandardPaths
-from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QApplication
-
-# Word
-from docx import Document
-from docx.shared import Inches
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-
-# PDF
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, Table, TableStyle
+# ===== ReportLab =====
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch
-from reportlab.lib.utils import ImageReader
+from reportlab.lib.units import mm
+from reportlab.lib import colors
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Image as RLImage,
+    PageBreak,
+    Table,
+    TableStyle,
+    KeepInFrame,
+)
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER
 
-# Chất lượng xuất: DPI cao cho matplotlib, scale 2x cho đồ thị web (Plotly)
-EXPORT_FIGURE_DPI = 300
-EXPORT_WEBVIEW_SCALE = 2
-# PDF: chiều cao tối đa ảnh trên 1 trang (point) — tránh LayoutError "too large on page"
-PDF_MAX_IMAGE_HEIGHT = 620
+# ===== Pillow (for splitting tall images) =====
+try:
+    from PIL import Image as PILImage
+except Exception:
+    PILImage = None
 
 
-def _safe_temp_dir() -> str:
-    base = QStandardPaths.writableLocation(QStandardPaths.TempLocation)
-    out = os.path.join(base, "dashboard_reports")
-    os.makedirs(out, exist_ok=True)
+# ============================================================
+# Config
+# ============================================================
+
+@dataclass
+class PdfLayoutConfig:
+    pagesize: Tuple[float, float] = A4
+
+    # Margins: reduce to make content fill the page
+    margin_left: float = 10 * mm
+    margin_right: float = 10 * mm
+    margin_top: float = 10 * mm
+    margin_bottom: float = 10 * mm
+
+    # Header/Footer
+    show_header: bool = True
+    show_footer: bool = True
+    header_height: float = 10 * mm
+    footer_height: float = 10 * mm
+
+    # Title section sizes
+    title_on_first_page_only: bool = True
+    title_font_size: int = 20
+    section_font_size: int = 13
+
+    # Image behavior
+    split_tall_images: bool = True     # best readability
+    always_full_width: bool = True     # scale by width first
+    max_split_part_px: int = 0         # 0 = auto compute from A4 frame
+    image_padding_top: float = 2
+    image_padding_bottom: float = 2
+
+    # Optional light border around images
+    image_border: bool = False
+
+
+# ============================================================
+# Utilities
+# ============================================================
+
+def _ensure_dir(path: str) -> None:
+    os.makedirs(path, exist_ok=True)
+
+
+def _temp_dir(subfolder: str = "dashboard_reports") -> str:
+    base = os.path.join(tempfile.gettempdir(), subfolder)
+    _ensure_dir(base)
+    return base
+
+
+def _get_usable_area(cfg: PdfLayoutConfig) -> Tuple[float, float]:
+    page_w, page_h = cfg.pagesize
+    usable_w = page_w - cfg.margin_left - cfg.margin_right
+    usable_h = page_h - cfg.margin_top - cfg.margin_bottom
+
+    # Reserve header/footer space inside the frame (so images don't collide)
+    if cfg.show_header:
+        usable_h -= cfg.header_height
+    if cfg.show_footer:
+        usable_h -= cfg.footer_height
+
+    return usable_w, usable_h
+
+
+def _draw_header_footer(canvas, doc, title: str, cfg: PdfLayoutConfig):
+    page_w, page_h = cfg.pagesize
+    canvas.saveState()
+
+    if cfg.show_header:
+        canvas.setFont("Helvetica-Bold", 10)
+        canvas.drawString(cfg.margin_left, page_h - cfg.margin_top + 2, title)
+
+    if cfg.show_footer:
+        canvas.setFont("Helvetica", 9)
+        canvas.drawRightString(
+            page_w - cfg.margin_right,
+            cfg.margin_bottom - 8,
+            f"Page {doc.page}"
+        )
+
+    canvas.restoreState()
+
+
+def _fit_image(img_path: str, max_w: float, max_h: float, prefer_full_width: bool = True) -> RLImage:
+    """
+    Create RLImage and set drawWidth/drawHeight so it fits within max_w/max_h.
+    prefer_full_width=True: try to fill width as much as possible.
+    """
+    img = RLImage(img_path)
+    iw, ih = float(img.imageWidth), float(img.imageHeight)
+    if iw <= 0 or ih <= 0:
+        return img
+
+    if prefer_full_width:
+        # Scale to full width first, then clamp by height if needed
+        scale = max_w / iw
+        new_h = ih * scale
+        if new_h > max_h:
+            # too tall -> scale by height instead
+            scale = max_h / ih
+    else:
+        scale = min(max_w / iw, max_h / ih)
+
+    scale = min(scale, 1.0e9)  # just in case
+    img.drawWidth = iw * scale
+    img.drawHeight = ih * scale
+    return img
+
+
+def _keep_in_frame(flowable, max_w: float, max_h: float):
+    """
+    Extra safety: shrink if slightly overflowing.
+    """
+    return KeepInFrame(max_w, max_h, [flowable], mode="shrink")
+
+
+def _estimate_split_height_px(img_path: str, max_w_pt: float, max_h_pt: float) -> int:
+    """
+    Compute a safe per-page slice height (pixels) so each slice fits when scaled.
+    """
+    if PILImage is None:
+        return 1200
+
+    im = PILImage.open(img_path)
+    w_px, h_px = im.size
+    if w_px <= 0:
+        return 1200
+
+    # If we scale by width to max_w_pt:
+    # scale = max_w_pt / w_px
+    # slice_h_pt = slice_h_px * scale <= max_h_pt
+    # => slice_h_px <= max_h_pt * w_px / max_w_pt
+    slice_h_px = int(max_h_pt * w_px / max_w_pt)
+
+    # Safety margin for any paddings
+    slice_h_px = int(slice_h_px * 0.95)
+
+    # clamp
+    return max(400, min(slice_h_px, 5000))
+
+
+def _split_image(img_path: str, out_dir: str, part_height_px: int, prefix: str) -> List[str]:
+    """
+    Split tall image into multiple PNG parts.
+    """
+    if PILImage is None:
+        return [img_path]
+
+    im = PILImage.open(img_path)
+    w, h = im.size
+    if h <= part_height_px:
+        return [img_path]
+
+    parts: List[str] = []
+    y = 0
+    idx = 1
+    while y < h:
+        box = (0, y, w, min(y + part_height_px, h))
+        part = im.crop(box)
+        out = os.path.join(out_dir, f"{prefix}_{idx}.png")
+        part.save(out)
+        parts.append(out)
+        y += part_height_px
+        idx += 1
+
+    return parts
+
+
+def _make_image_block(
+    img_path: str,
+    usable_w: float,
+    usable_h: float,
+    cfg: PdfLayoutConfig,
+) -> Table:
+    """
+    Wrap image in a 1x1 table for consistent centering/padding (no random shrinking).
+    """
+    img = _fit_image(
+        img_path,
+        max_w=usable_w,
+        max_h=usable_h,
+        prefer_full_width=cfg.always_full_width,
+    )
+
+    # final safety net
+    kif = _keep_in_frame(img, usable_w, usable_h)
+
+    tbl = Table([[kif]], colWidths=[usable_w])
+    style_cmds = [
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), cfg.image_padding_top),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), cfg.image_padding_bottom),
+    ]
+    if cfg.image_border:
+        style_cmds.append(("BOX", (0, 0), (-1, -1), 0.35, colors.lightgrey))
+
+    tbl.setStyle(TableStyle(style_cmds))
+    return tbl
+
+
+def _collect_cell_images_from_temp(temp_folder: str) -> List[str]:
+    """
+    Collect images named like cell_r1_c1.png in temp folder.
+    """
+    if not os.path.isdir(temp_folder):
+        return []
+    out = []
+    for fn in sorted(os.listdir(temp_folder)):
+        low = fn.lower()
+        if low.endswith(".png") and low.startswith("cell_"):
+            out.append(os.path.join(temp_folder, fn))
     return out
 
 
-def _grab_widget_png(widget, out_path: str) -> bool:
-    if widget is None:
-        return False
+# ============================================================
+# Public API
+# ============================================================
 
-    # 1) Matplotlib (PlotBoundCell): xuất trực tiếp từ figure, DPI cao → nét nhất
-    if _save_plotboundcell_figure(widget, out_path, dpi=EXPORT_FIGURE_DPI):
-        return True
-
-    # 2) PlotImageCell: dùng ảnh gốc (base64), không grab → giữ nguyên chất lượng
-    if _save_plotimagecell_raw(widget, out_path):
-        return True
-
-    # 3) PlotlyEmbedCell: chụp web_view ở độ phân giải 2x → ảnh đẹp hơn
-    if _grab_plotlyembed_high_res(widget, out_path, scale=EXPORT_WEBVIEW_SCALE):
-        return True
-
-    # 4) Fallback: chụp widget bình thường
-    try:
-        pix: QPixmap = widget.grab()
-        if pix.isNull():
-            return False
-        return pix.save(out_path, "PNG")
-    except Exception:
-        return False
-
-
-def _save_plotboundcell_figure(widget, out_path: str, dpi: int = 300) -> bool:
+def export_report_pdf(
+    save_path: str,
+    title: str,
+    parent_widget=None,
+    *,
+    temp_image_dir: Optional[str] = None,
+    image_paths: Optional[List[str]] = None,
+    cfg: Optional[PdfLayoutConfig] = None,
+) -> None:
     """
-    Xuất trực tiếp từ matplotlib Figure (PlotBoundCell) — vector-quality, DPI cao.
+    Export report PDF in A4, full-page layout.
+
+    How to use (recommended):
+    - If your app already exports images (cell_rX_cY.png) to temp folder,
+      call export_report_pdf(save_path, title, self, temp_image_dir=that_dir)
+
+    - Or pass explicit list of image_paths.
+
+    Fixes:
+    - Auto-fit full width to A4
+    - Auto-split tall images into multiple pages (prevents LayoutError)
     """
-    fig = getattr(widget, "figure", None)
-    if fig is None:
-        return False
-    savefig = getattr(fig, "savefig", None)
-    if not callable(savefig):
-        return False
-    try:
-        fig.savefig(
-            out_path,
-            dpi=dpi,
-            bbox_inches="tight",
-            facecolor="white",
-            edgecolor="none",
-        )
-        return True
-    except Exception:
-        return False
+    cfg = cfg or PdfLayoutConfig()
+    temp_image_dir = temp_image_dir or _temp_dir("dashboard_reports")
 
+    # If no image_paths passed, auto collect from temp folder
+    if image_paths is None:
+        image_paths = _collect_cell_images_from_temp(temp_image_dir)
 
-def _save_plotimagecell_raw(widget, out_path: str) -> bool:
-    """
-    Ô ảnh (PlotImageCell): ghi thẳng ảnh gốc từ image_base64 — không qua grab, chất lượng tốt nhất.
-    """
-    b64 = getattr(widget, "image_base64", None)
-    if not b64 or not isinstance(b64, str):
-        return False
-    try:
-        raw = base64.b64decode(b64)
-        if raw:
-            with open(out_path, "wb") as f:
-                f.write(raw)
-            return True
-    except Exception:
-        pass
-    return False
+    doc = SimpleDocTemplate(
+        save_path,
+        pagesize=cfg.pagesize,
+        leftMargin=cfg.margin_left,
+        rightMargin=cfg.margin_right,
+        topMargin=cfg.margin_top,
+        bottomMargin=cfg.margin_bottom,
+        title=title,
+        author="Dashboard-VP",
+    )
 
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(
+        name="BigTitle",
+        parent=styles["Title"],
+        alignment=TA_CENTER,
+        fontSize=cfg.title_font_size,
+        spaceAfter=10,
+    ))
+    styles.add(ParagraphStyle(
+        name="Section",
+        parent=styles["Heading2"],
+        fontSize=cfg.section_font_size,
+        spaceBefore=6,
+        spaceAfter=6,
+    ))
 
-def _grab_plotlyembed_high_res(widget, out_path: str, scale: int = 2) -> bool:
-    """
-    PlotlyEmbedCell: tạm phóng to web_view rồi grab → ảnh độ phân giải cao hơn.
-    """
-    web_view = getattr(widget, "web_view", None)
-    if web_view is None:
-        return False
-    try:
-        old_w = web_view.width()
-        old_h = web_view.height()
-        if old_w <= 0 or old_h <= 0:
-            return False
-        new_w = old_w * scale
-        new_h = old_h * scale
-        web_view.setFixedSize(new_w, new_h)
-        for _ in range(4):
-            QApplication.processEvents()
-        time.sleep(0.15)
-        QApplication.processEvents()
-        pix = web_view.grab()
-        web_view.setFixedSize(old_w, old_h)
-        if pix.isNull():
-            web_view.setMinimumSize(260, 180)
-            return False
-        ok = pix.save(out_path, "PNG")
-        web_view.setMinimumSize(260, 180)
-        return ok
-    except Exception:
-        try:
-            web_view.setMinimumSize(260, 180)
-        except Exception:
-            pass
-        return False
+    usable_w, usable_h = _get_usable_area(cfg)
 
-def _pdf_image_fit_page(img_path: str, col_w: float, max_height: float = PDF_MAX_IMAGE_HEIGHT):
-    """Tạo RLImage vừa khung trang: bề ngang col_w, chiều cao tối đa max_height, giữ tỷ lệ."""
-    try:
-        ir = ImageReader(img_path)
-        pw, ph = ir.getSize()
-        if pw <= 0 or ph <= 0:
-            return RLImage(img_path, width=col_w)
-        # Tính kích thước hiển thị (point) giữ tỷ lệ, không vượt col_w và max_height
-        aspect = ph / pw
-        if col_w * aspect <= max_height:
-            return RLImage(img_path, width=col_w)
-        return RLImage(img_path, height=max_height)
-    except Exception:
-        return RLImage(img_path, width=col_w)
+    story: List = []
 
+    # ===== Page 1: Title + optional summary =====
+    story.append(Paragraph(title, styles["BigTitle"]))
+    story.append(Paragraph("Monitoring Layout", styles["Section"]))
+    story.append(Spacer(1, 4))
 
-def _build_widget_matrix(system_widget) -> List[List[Optional[object]]]:
-    """
-    Trả về ma trận widget theo đúng bố cục dashboard:
-    - số hàng = len(row_cols)
-    - số cột = max(row_cols)
-    - ô không tồn tại ở hàng ngắn hơn => None
-    """
-    row_cols = system_widget.layout_config.get("row_cols", [1])
-    row_cols = [max(1, int(x)) for x in row_cols]
-    max_cols = max(row_cols) if row_cols else 1
+    # If you want the FIRST image to fill the first page too:
+    # set cfg.title_on_first_page_only=False and reduce title sizes
+    # But the best look is: title page then full-page images.
+    if cfg.title_on_first_page_only and image_paths:
+        story.append(PageBreak())
 
-    # map (r,c) -> widget
-    by_pos = {}
-    for cid, (r, c) in system_widget.cell_pos.items():
-        by_pos[(r, c)] = system_widget.cell_widgets.get(cid)
+    # ===== Pages: Images =====
+    for img_idx, img_path in enumerate(image_paths, start=1):
+        if not os.path.exists(img_path):
+            continue
 
-    matrix: List[List[Optional[object]]] = []
-    for r, cols_r in enumerate(row_cols):
-        row = []
-        for c in range(max_cols):
-            if c < cols_r:
-                row.append(by_pos.get((r, c)))
+        # For a single image: optionally split to multiple pages
+        if cfg.split_tall_images:
+            prefix = os.path.splitext(os.path.basename(img_path))[0] + "_part"
+
+            if cfg.max_split_part_px > 0:
+                part_h_px = cfg.max_split_part_px
             else:
-                row.append(None)  # hàng này không có cột đó
-        matrix.append(row)
-    return matrix
+                part_h_px = _estimate_split_height_px(img_path, usable_w, usable_h)
+
+            parts = _split_image(img_path, temp_image_dir, part_h_px, prefix)
+        else:
+            parts = [img_path]
+
+        # Optional section label for each block (small)
+        # story.append(Paragraph(os.path.basename(img_path), styles["Section"]))
+        # story.append(Spacer(1, 2))
+
+        for p_i, part in enumerate(parts, start=1):
+            # On the very first image page (if not using title-only page),
+            # usable_h is slightly reduced by title text, but we keep it simple:
+            # If you want perfect: compute reserved space and reduce max_h.
+            block = _make_image_block(part, usable_w, usable_h, cfg)
+            story.append(block)
+
+            # If more parts exist, force new page
+            if p_i < len(parts):
+                story.append(PageBreak())
+
+        # After each original image, start new page (recommended)
+        # to get true "full page" look per chart/layout
+        if img_idx < len(image_paths):
+            story.append(PageBreak())
+
+    # If no images, still build PDF
+    if not image_paths:
+        story.append(Paragraph("No exported images found to include in this report.", styles["BodyText"]))
+
+    doc.build(
+        story,
+        onFirstPage=lambda c, d: _draw_header_footer(c, d, title, cfg),
+        onLaterPages=lambda c, d: _draw_header_footer(c, d, title, cfg),
+    )
 
 
-def _docx_remove_table_borders(table) -> None:
-    """Bỏ toàn bộ viền bảng Word."""
-    for row in table.rows:
-        for cell in row.cells:
-            tc = cell._tc
-            tcPr = tc.get_or_add_tcPr()
-            tcBorders = OxmlElement("w:tcBorders")
-            for side in ("top", "left", "bottom", "right"):
-                el = OxmlElement(f"w:{side}")
-                el.set(qn("w:val"), "nil")
-                tcBorders.append(el)
-            tcPr.append(tcBorders)
+def export_report_docx(save_path: str, title: str, parent_widget=None) -> None:
+    """
+    Basic DOCX exporter (safe fallback).
+    If your project already has a richer docx exporter, keep yours.
+    """
+    try:
+        from docx import Document
+    except Exception as e:
+        raise RuntimeError("python-docx is required. Install: pip install python-docx") from e
 
-
-def export_report_docx(save_path: str, title: str, system_widget) -> None:
     doc = Document()
-    doc.add_heading(title, level=1)
-    doc.add_paragraph(f"Generated: {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    doc.add_paragraph("")
-
-    temp_dir = _safe_temp_dir()
-    matrix = _build_widget_matrix(system_widget)
-
-    rows = len(matrix)
-    cols = len(matrix[0]) if rows else 1
-
-    # Lắp đầy trang: dùng hết bề ngang (trừ margin ~1" mỗi bên → ~6.5")
-    usable_width_in = 6.5
-    img_width_in = usable_width_in / max(cols, 1)
-
-    table = doc.add_table(rows=rows, cols=cols)
-    table.style = "Table Grid"
-    table.autofit = False
-    col_width = Inches(usable_width_in / max(cols, 1))
-    for col in table.columns:
-        for cell in col.cells:
-            cell.width = col_width
-
-    _docx_remove_table_borders(table)
-
-    for r in range(rows):
-        for c in range(cols):
-            cell = table.cell(r, c)
-            w = matrix[r][c]
-
-            if w is None:
-                cell.text = ""
-                continue
-
-            get_content = getattr(w, "get_content", None)
-            if callable(get_content):
-                text = (get_content() or "").strip()
-                cell.text = text if text else ""
-                continue
-
-            img_path = os.path.join(temp_dir, f"cell_r{r+1}_c{c+1}.png")
-            ok = _grab_widget_png(w, img_path)
-            if ok and os.path.exists(img_path):
-                cell.text = ""
-                p = cell.paragraphs[0]
-                run = p.add_run()
-                run.add_picture(img_path, width=Inches(img_width_in))
-            else:
-                cell.text = "(cannot capture)"
-
+    doc.add_heading(title, level=0)
+    doc.add_paragraph("Auto-generated report.")
     doc.save(save_path)
 
 
-def export_report_pdf(save_path: str, title: str, system_widget) -> None:
-    styles = getSampleStyleSheet()
-    story = []
+# ============================================================
+# Optional: quick CLI test (run this file directly)
+# ============================================================
+if __name__ == "__main__":
+    # Put your temp folder here (where cell_r1_c1.png exists)
+    tmp = _temp_dir("dashboard_reports")
+    out_pdf = os.path.join(tmp, "test_monitoring_report_A4.pdf")
 
-    story.append(Paragraph(f"<b>{title}</b>", styles["Title"]))
-    story.append(Spacer(1, 0.15 * inch))
-    story.append(Paragraph(f"Generated: {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles["Normal"]))
-    story.append(Spacer(1, 0.25 * inch))
-
-    temp_dir = _safe_temp_dir()
-    matrix = _build_widget_matrix(system_widget)
-
-    rows = len(matrix)
-    cols = len(matrix[0]) if rows else 1
-
-    # A4: lắp đầy bề ngang (trừ margin), không viền
-    total_w = 7.2 * inch
-    col_w = total_w / max(cols, 1)
-
-    table_data = []
-    for r in range(rows):
-        row_cells = []
-        for c in range(cols):
-            w = matrix[r][c]
-            if w is None:
-                row_cells.append("")
-                continue
-
-            get_content = getattr(w, "get_content", None)
-            if callable(get_content):
-                txt = (get_content() or "").strip()
-                row_cells.append(Paragraph(txt.replace("\n", "<br/>"), styles["BodyText"]) if txt else "")
-                continue
-
-            img_path = os.path.join(temp_dir, f"cell_r{r+1}_c{c+1}.png")
-            ok = _grab_widget_png(w, img_path)
-            if ok and os.path.exists(img_path):
-                row_cells.append(_pdf_image_fit_page(img_path, col_w))
-            else:
-                row_cells.append(Paragraph("(cannot capture)", styles["BodyText"]))
-        table_data.append(row_cells)
-
-    t = Table(table_data, colWidths=[col_w] * cols)
-    # Không GRID/viền, padding tối thiểu để nội dung lắp đầy
-    t.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 0),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-    ]))
-    story.append(t)
-
-    doc = SimpleDocTemplate(save_path, pagesize=A4)
-    doc.build(story)
+    export_report_pdf(
+        out_pdf,
+        "Monitoring Report",
+        temp_image_dir=tmp,
+        cfg=PdfLayoutConfig(
+            split_tall_images=True,
+            title_on_first_page_only=True,
+            always_full_width=True,
+            margin_left=8 * mm,
+            margin_right=8 * mm,
+            margin_top=8 * mm,
+            margin_bottom=8 * mm,
+            image_border=False,
+        ),
+    )
+    print("Exported:", out_pdf)

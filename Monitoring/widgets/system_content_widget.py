@@ -28,8 +28,29 @@ from Monitoring.widgets.plot_image_cell import PlotImageCell
 from Monitoring.widgets.plotly_embed_cell import PlotlyEmbedCell
 from PySide6.QtWidgets import QFileDialog
 from Monitoring.reporting.export_report_dialog import ExportReportDialog
-from Monitoring.reporting.report_exporter import export_report_docx, export_report_pdf
+from Monitoring.reporting.report_exporter import export_report_docx, export_report_pdf, PdfLayoutConfig
+from reportlab.lib.units import mm
+import os, tempfile
+from PySide6.QtGui import QPixmap
+from reportlab.lib.pagesizes import A4, landscape
+from PySide6.QtGui import QImage, QPainter
+from PySide6.QtCore import QPoint
 
+def save_widget_high_res(widget, path, scale_factor=3):
+    w = max(1, widget.width())
+    h = max(1, widget.height())
+
+    img = QImage(w * scale_factor, h * scale_factor, QImage.Format_ARGB32)
+    img.fill(Qt.white)
+
+    painter = QPainter(img)
+    painter.scale(scale_factor, scale_factor)
+
+    # ✅ PySide6 yêu cầu targetOffset khi render với QPainter
+    widget.render(painter, QPoint(0, 0))
+
+    painter.end()
+    img.save(path)
 def _default_layout() -> dict:
     # New format: row_cols allows each row to have different number of columns.
     # Example: {"row_cols": [1, 3, 2], "cells": [...]}
@@ -484,6 +505,36 @@ class SystemContentWidget(QWidget):
                 return
             if not save_path.lower().endswith(".pdf"):
                 save_path += ".pdf"
-            export_report_pdf(save_path, title, self)
+
+            # 1) Temp folder
+            temp_dir = os.path.join(tempfile.gettempdir(), "dashboard_reports")
+            os.makedirs(temp_dir, exist_ok=True)
+
+            # 2) Chụp toàn bộ dashboard thành 1 ảnh lớn
+            img_path = os.path.join(temp_dir, "cell_r1_c1.png")
+            save_widget_high_res(self.grid_container, img_path, scale_factor=4)  # 3 hoặc 4
+
+            # 3) PDF config (A4 ngang sẽ fill tốt hơn với chart dài)
+            from reportlab.lib.pagesizes import A4, landscape
+            cfg = PdfLayoutConfig(
+                pagesize=landscape(A4),
+                split_tall_images=True,
+                title_on_first_page_only=True,
+                always_full_width=True,
+                margin_left=8*mm,
+                margin_right=8*mm,
+                margin_top=8*mm,
+                margin_bottom=8*mm
+            )
+
+            # 4) Export PDF
+            export_report_pdf(
+                save_path,
+                title,
+                self,
+                temp_image_dir=temp_dir,
+                cfg=cfg
+            )
+
 
         QMessageBox.information(self, "Export Report", f"Đã xuất báo cáo:\n{save_path}")
