@@ -1,9 +1,11 @@
 """
 Widget nội dung hệ thống - layout theo hàng/cột (mỗi hàng có thể có số cột khác nhau).
-Mỗi ô: right-click → Get Plot (lấy đồ thị hiện tại tab Plot) | Note (ghi text).
+Mỗi ô: right-click → Get Plot (lấy nguyên đồ thị từ tab Plotly, cùng cách thức như Plot: nội dung tab → nhúng trực tiếp) | Note (ghi text).
 """
 from __future__ import annotations
+import base64
 import uuid
+from io import BytesIO
 from typing import Optional, Callable
 import pandas as pd
 from PySide6.QtWidgets import (
@@ -22,6 +24,8 @@ from PySide6.QtCore import Qt
 from Monitoring.widgets.placeholder_cell import PlaceholderCell
 from Monitoring.plot_binding.plot_bound_cell import PlotBoundCell
 from Monitoring.widgets.text_cell import TextCellWidget
+from Monitoring.widgets.plot_image_cell import PlotImageCell
+from Monitoring.widgets.plotly_embed_cell import PlotlyEmbedCell
 from PySide6.QtWidgets import QFileDialog
 from Monitoring.reporting.export_report_dialog import ExportReportDialog
 from Monitoring.reporting.report_exporter import export_report_docx, export_report_pdf
@@ -154,6 +158,22 @@ class SystemContentWidget(QWidget):
                     "type": "plot_bound",
                     "plot_spec": w.plot_spec,
                 })
+            elif isinstance(w, PlotImageCell):
+                cells.append({
+                    "cell_id": cell_id,
+                    "row": r,
+                    "col": c,
+                    "type": "plot_image",
+                    "image_base64": getattr(w, "image_base64", "") or "",
+                })
+            elif isinstance(w, PlotlyEmbedCell):
+                cells.append({
+                    "cell_id": cell_id,
+                    "row": r,
+                    "col": c,
+                    "type": "plotly_embed",
+                    "html_content": getattr(w, "html_content", "") or "",
+                })
             elif isinstance(w, TextCellWidget):
                 cells.append({
                     "cell_id": cell_id,
@@ -205,6 +225,17 @@ class SystemContentWidget(QWidget):
                         )
                         w.on_clear = lambda row=r, col=c: self._on_clear_cell(row, col)
                         w.on_refresh = lambda row=r, col=c: self._on_refresh_plot_cell(row, col)
+                    elif ctype == "plot_image":
+                        w = PlotImageCell(image_base64=cell_info.get("image_base64", ""))
+                        w.on_clear = lambda row=r, col=c: self._on_clear_cell(row, col)
+                        w.on_refresh = lambda row=r, col=c: self._on_refresh_plot_image_cell(row, col)
+                    elif ctype == "plotly_embed":
+                        w = PlotlyEmbedCell(
+                            html_content=cell_info.get("html_content", ""),
+                            html_path=cell_info.get("html_path") or None,
+                        )
+                        w.on_clear = lambda row=r, col=c: self._on_clear_cell(row, col)
+                        w.on_refresh = lambda row=r, col=c: self._on_refresh_plotly_embed_cell(row, col)
                     else:
                         w = TextCellWidget(initial_text=cell_info.get("text_content", ""))
                         w.on_clear = lambda row=r, col=c: self._on_clear_cell(row, col)
@@ -229,7 +260,7 @@ class SystemContentWidget(QWidget):
         self.active_row = max(0, row)
 
     def _get_plot_spec(self) -> dict | None:
-        """Lấy PlotSpec hiện tại từ tab Plot (Data Analyzing)."""
+        """Lấy PlotSpec từ tab Plot (cho ô plot_bound cũ)."""
         plot_tab = self.plot_provider() if self.plot_provider else None
         if plot_tab is None:
             return None
@@ -238,26 +269,69 @@ class SystemContentWidget(QWidget):
             return None
         return getter()
 
+    def _get_plotly_html_content(self) -> tuple[str | None, str | None]:
+        """Lấy nguyên nội dung HTML đồ thị từ tab Plotly (cùng cách thức Plot: nội dung tab → nhúng). Không dùng kaleido/subprocess."""
+        plotly_tab = self.plot_provider() if self.plot_provider else None
+        if plotly_tab is None:
+            return None, "Không tìm thấy tab Plotly."
+        getter = getattr(plotly_tab, "get_last_html_content", None)
+        if not callable(getter):
+            return None, "Tab Plotly không hỗ trợ lấy đồ thị."
+        html_content = getter()
+        if html_content:
+            return html_content, None
+        return None, "Chưa có đồ thị. Vẽ đồ thị tại tab Plotly (Data Analyzing) trước, sau đó chuột phải → Get Plot."
+
+    def _capture_matplotlib_as_base64(self) -> str | None:
+        """Chụp figure từ tab Plot (matplotlib) ra PNG base64 - cho ô ảnh cũ."""
+        plot_tab = self.plot_provider() if self.plot_provider else None
+        if plot_tab is None:
+            return None
+        fig = getattr(plot_tab, "figure", None)
+        if fig is None:
+            return None
+        buf = BytesIO()
+        try:
+            fig.savefig(buf, format="png")
+            buf.seek(0)
+            return base64.b64encode(buf.read()).decode("ascii")
+        except Exception:
+            return None
+
     def _on_get_plot(self, row: int, col: int) -> None:
-        """Bind đồ thị hiện tại từ tab Plot vào ô (row, col) bằng PlotSpec (không ảnh)."""
+        """Lấy đồ thị từ tab Plotly sang ô — load từ file giống tab Plotly (QWebEngineView.load file)."""
         self.active_row = row
 
-        spec = self._get_plot_spec()
-        if spec is None:
+        plotly_tab = self.plot_provider() if self.plot_provider else None
+        if plotly_tab is None:
+            QMessageBox.warning(self, "Chưa có đồ thị", "Không tìm thấy tab Plotly.")
+            return
+        path_getter = getattr(plotly_tab, "get_last_html_path", None)
+        content_getter = getattr(plotly_tab, "get_last_html_content", None)
+        html_path = path_getter() if callable(path_getter) else None
+        html_content = content_getter() if callable(content_getter) else None
+        if not html_content and not html_path:
             QMessageBox.warning(
                 self,
                 "Chưa có đồ thị",
-                "Vẽ đồ thị tại tab Plot (Data Analyzing) trước, sau đó chuột phải → Get Plot."
+                "Vẽ đồ thị tại tab Plotly (Data Analyzing) trước, sau đó chuột phải → Get Plot."
             )
             return
+        if not html_content and html_path:
+            try:
+                with open(html_path, "r", encoding="utf-8") as f:
+                    html_content = f.read()
+            except Exception:
+                html_content = ""
 
         cell_id = str(uuid.uuid4())[:8]
         self.layout_config["cells"].append({
             "cell_id": cell_id,
             "row": row,
             "col": col,
-            "type": "plot_bound",
-            "plot_spec": spec,
+            "type": "plotly_embed",
+            "html_content": html_content or "",
+            "html_path": html_path or "",
         })
         self._rebuild_grid()
 
@@ -292,6 +366,32 @@ class SystemContentWidget(QWidget):
         for c in cells:
             if c.get("row") == row and c.get("col") == col and c.get("type") == "plot_bound":
                 c["plot_spec"] = spec
+                break
+        self._rebuild_grid()
+
+    def _on_refresh_plot_image_cell(self, row: int, col: int) -> None:
+        """Chụp lại đồ thị từ tab Plot (matplotlib) cho ô ảnh (row, col)."""
+        b64 = self._capture_matplotlib_as_base64()
+        if not b64:
+            QMessageBox.warning(self, "Chưa có đồ thị", "Vẽ đồ thị tại tab Plot trước.")
+            return
+        cells = self.layout_config.get("cells", [])
+        for c in cells:
+            if c.get("row") == row and c.get("col") == col and c.get("type") == "plot_image":
+                c["image_base64"] = b64
+                break
+        self._rebuild_grid()
+
+    def _on_refresh_plotly_embed_cell(self, row: int, col: int) -> None:
+        """Lấy lại nguyên đồ thị từ tab Plotly cho ô plotly_embed (row, col)."""
+        html_content, err_msg = self._get_plotly_html_content()
+        if not html_content:
+            QMessageBox.warning(self, "Chưa có đồ thị", err_msg or "Vẽ đồ thị tại tab Plotly trước.")
+            return
+        cells = self.layout_config.get("cells", [])
+        for c in cells:
+            if c.get("row") == row and c.get("col") == col and c.get("type") == "plotly_embed":
+                c["html_content"] = html_content
                 break
         self._rebuild_grid()
 

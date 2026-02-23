@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QPushButton, QDateTimeEdit,
+    QPushButton, QDateTimeEdit, QSpinBox,
     QMessageBox, QDialog, QDialogButtonBox, QCheckBox, QScrollArea,
     QSizePolicy
 )
@@ -12,6 +12,20 @@ import tempfile
 from project1_main_tab.Plotly_modules.plotly_line_chart import plotly_line_chart
 from project1_main_tab.Plotly_modules.plotly_scatter2d import plotly_scatter2d
 from project1_main_tab.Plotly_modules.plotly_bar_max import plotly_bar_max
+from project1_main_tab.Plotly_modules.plotly_histogram import plotly_histogram
+from project1_main_tab.Plotly_modules.plotly_boxplot import plotly_boxplot
+from project1_main_tab.Plotly_modules.plotly_violin import plotly_violin
+from project1_main_tab.Plotly_modules.plotly_boxen import plotly_boxen
+from project1_main_tab.Plotly_modules.plotly_heatmap import plotly_heatmap
+from project1_main_tab.Plotly_modules.plotly_zscore_scatter import plotly_zscore_scatter
+from project1_main_tab.Plotly_modules.plotly_pairplot import plotly_pairplot
+from project1_main_tab.Plotly_modules.plotly_hist_box import plotly_hist_box
+from project1_main_tab.Plotly_modules.plotly_pie import plotly_pie
+from project1_main_tab.Plotly_modules.plotly_area import plotly_area
+from project1_main_tab.Plotly_modules.plotly_treemap import plotly_treemap
+from project1_main_tab.Plotly_modules.plotly_sunburst import plotly_sunburst
+from project1_main_tab.Plotly_modules.plotly_parcoords import plotly_parcoords
+from project1_main_tab.plot_tab import MultiRangeDialog
 IGNORED_COLUMNS = {'datetime', 'date', 'time', 'sourcefolder'}
 
 
@@ -76,6 +90,8 @@ class PlotlyTab(QWidget):
         super().__init__(parent)
         self.df = pd.DataFrame()
         self.selected_vars = []
+        self._last_fig = None
+        self._last_html_path = None  # Đường dẫn HTML đồ thị cuối → Monitoring nhúng nguyên đồ thị (không dùng kaleido)
 
         # ===== ROOT LAYOUT: full khung =====
         root = QVBoxLayout(self)
@@ -88,10 +104,22 @@ class PlotlyTab(QWidget):
         topbar.setSpacing(6)
 
         self.chart_type_combo = QComboBox()
-        self.chart_type_combo.addItems(["Line", "Bar (Max)", "Scatter"])
+        self.chart_type_combo.addItems([
+            "Line", "Area", "Scatter", "Bar (Max)", "Z-score Scatter",
+            "Heatmap Correlation", "Histogram", "Boxplot",
+            "Histogram + Boxplot", "Violin", "Boxen", "Pairplot",
+            "Pie", "Treemap", "Sunburst", "Parallel Coordinates",
+        ])
 
         self.btn_variable = QPushButton("🧩 Variable")
         self.btn_variable.clicked.connect(self.open_variable_dialog)
+
+        self.range_spin = QSpinBox()
+        self.range_spin.setMinimum(1)
+        self.range_spin.setMaximum(10)
+        self.range_spin.setValue(1)
+        self.range_spin.setVisible(False)
+        self.chart_type_combo.currentTextChanged.connect(self._on_chart_type_changed)
 
         self.start_time = QDateTimeEdit()
         self.end_time = QDateTimeEdit()
@@ -105,6 +133,8 @@ class PlotlyTab(QWidget):
         topbar.addWidget(QLabel("Biểu đồ:"))
         topbar.addWidget(self.chart_type_combo)
         topbar.addWidget(self.btn_variable)
+        topbar.addWidget(QLabel("Range:"))
+        topbar.addWidget(self.range_spin)
         topbar.addWidget(QLabel("⏱ From:"))
         topbar.addWidget(self.start_time)
         topbar.addWidget(QLabel("To:"))
@@ -145,6 +175,11 @@ class PlotlyTab(QWidget):
             self.selected_vars = dialog.get_selected_variables()
             self.draw_chart()
 
+    def _on_chart_type_changed(self, text: str):
+        is_line = (text or "").lower() == "line"
+        is_bar = (text or "").lower() == "bar (max)"
+        self.range_spin.setVisible(is_line or is_bar)
+
     def get_filtered_df(self):
         df_filtered = self.df.copy()
         if 'Datetime' in df_filtered.columns:
@@ -168,24 +203,39 @@ class PlotlyTab(QWidget):
             return
 
         if chart_type == "Scatter":
-            # hiện tại logic scatter của anh đang ghi đè fig; để nguyên theo yêu cầu
-            fig = None
-            for i in range(len(self.selected_vars) - 1):
-                fig = plotly_scatter2d(df_filtered, self.selected_vars[i], self.selected_vars[i + 1])
-
-            if fig is None:
+            if len(self.selected_vars) != 2:
+                QMessageBox.warning(self, "Thiếu biến", "Scatter cần đúng 2 biến (X và Y).")
                 return
-
-            # render nội bộ luôn (không cần file)
-            html = pio.to_html(fig, full_html=False, include_plotlyjs=True, config={"responsive": True})
-            self.plot_view.setHtml(html)
+            try:
+                fig = plotly_scatter2d(df_filtered, self.selected_vars[0], self.selected_vars[1])
+            except Exception as e:
+                QMessageBox.critical(self, "Lỗi", f"Không vẽ được scatter: {e}")
+                return
+            if fig is None:
+                QMessageBox.warning(self, "Không đủ dữ liệu", "Không đủ điểm để vẽ (cần ≥2 điểm).")
+                return
+            self._last_fig = fig
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+            pio.write_html(fig, file=tmp.name, include_plotlyjs=True, full_html=True,
+                          auto_open=False, config={"responsive": True, "displayModeBar": True})
+            self._last_html_path = tmp.name
+            self.plot_view.load(QUrl.fromLocalFile(tmp.name))
             return
 
         elif chart_type == "Line":
-            x = 'Datetime'
-            fig = plotly_line_chart(df_filtered, x, self.selected_vars)
+            x = "Datetime" if "Datetime" in df_filtered.columns else (self.selected_vars[0] if self.selected_vars else "x")
+            time_ranges = None
+            if self.range_spin.value() > 1 and "Datetime" in self.df.columns:
+                dlg = MultiRangeDialog(self.range_spin.value(), df=self.df, parent=self)
+                if dlg.exec():
+                    time_ranges = dlg.get_ranges()
+                else:
+                    return
+            fig = plotly_line_chart(self.df, x, self.selected_vars, time_ranges=time_ranges)
+            if fig is None:
+                fig = plotly_line_chart(df_filtered, x, self.selected_vars)
 
-            # file html tạm: ổn định hơn cho dữ liệu lớn
+            self._last_fig = fig
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
             plot_config = {
                 "responsive": True,
@@ -202,31 +252,129 @@ class PlotlyTab(QWidget):
                 auto_open=False,
                 config=plot_config
             )
+            self._last_html_path = tmp.name
             self.plot_view.load(QUrl.fromLocalFile(tmp.name))
             return
         elif chart_type == "Bar (Max)":
-
+            time_ranges = None
+            if self.range_spin.value() > 1 and "Datetime" in self.df.columns:
+                dlg = MultiRangeDialog(self.range_spin.value(), df=self.df, parent=self)
+                if dlg.exec():
+                    time_ranges = dlg.get_ranges()
+                else:
+                    return
             fig = plotly_bar_max(
-                df_filtered,
+                self.df,
                 self.selected_vars,
-                title="Max value (within selected time range)"
+                title="Max value (within selected time range)",
+                time_ranges=time_ranges,
             )
-
+            self._last_fig = fig
             plot_config = {
                 "responsive": True,
                 "displayModeBar": True,
                 "scrollZoom": True,
                 "displaylogo": False,
             }
-
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
-            pio.write_html(
-                fig,
-                file=tmp.name,
-                include_plotlyjs=True,
-                full_html=True,
-                auto_open=False,
-                config=plot_config
-            )
+            pio.write_html(fig, file=tmp.name, include_plotlyjs=True, full_html=True,
+                          auto_open=False, config=plot_config)
+            self._last_html_path = tmp.name
             self.plot_view.load(QUrl.fromLocalFile(tmp.name))
             return
+        elif chart_type == "Area":
+            if "Datetime" in df_filtered.columns:
+                x = "Datetime"
+                y_cols = [c for c in self.selected_vars if c in df_filtered.columns and c != "Datetime" and pd.api.types.is_numeric_dtype(df_filtered[c])]
+            else:
+                x = self.selected_vars[0] if self.selected_vars else None
+                y_cols = [c for c in self.selected_vars[1:] if c in df_filtered.columns] if len(self.selected_vars) > 1 else self.selected_vars
+            if not y_cols:
+                y_cols = [c for c in self.selected_vars if c in df_filtered.columns and c != x]
+            if not x or not y_cols:
+                QMessageBox.warning(self, "Thiếu biến", "Area cần cột Datetime và ít nhất 1 biến numeric.")
+                return
+            fig = plotly_area(df_filtered, x, y_cols)
+            if fig is not None:
+                self._last_fig = fig
+                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+                pio.write_html(fig, file=tmp.name, include_plotlyjs=True, full_html=True,
+                              auto_open=False, config={"responsive": True, "displayModeBar": True})
+                self._last_html_path = tmp.name
+                self.plot_view.load(QUrl.fromLocalFile(tmp.name))
+            return
+
+        # Các loại biểu đồ mới (tương tự Plot tab)
+        plot_config = {
+            "responsive": True,
+            "displayModeBar": True,
+            "scrollZoom": True,
+            "displaylogo": False,
+        }
+        fig = None
+        try:
+            if chart_type == "Histogram":
+                fig = plotly_histogram(df_filtered, self.selected_vars)
+            elif chart_type == "Boxplot":
+                fig = plotly_boxplot(df_filtered, self.selected_vars)
+            elif chart_type == "Violin":
+                fig = plotly_violin(df_filtered, self.selected_vars)
+            elif chart_type == "Boxen":
+                fig = plotly_boxen(df_filtered, self.selected_vars)
+            elif chart_type == "Histogram + Boxplot":
+                fig = plotly_hist_box(df_filtered, self.selected_vars)
+            elif chart_type == "Heatmap Correlation":
+                if len(self.selected_vars) < 2:
+                    QMessageBox.warning(self, "Thiếu biến", "Heatmap cần ít nhất 2 biến.")
+                    return
+                fig = plotly_heatmap(df_filtered, self.selected_vars)
+            elif chart_type == "Z-score Scatter":
+                if len(self.selected_vars) != 2:
+                    QMessageBox.warning(self, "Thiếu biến", "Z-score Scatter cần đúng 2 biến.")
+                    return
+                fig = plotly_zscore_scatter(df_filtered, self.selected_vars[0], self.selected_vars[1])
+            elif chart_type == "Pairplot":
+                if len(self.selected_vars) < 2:
+                    QMessageBox.warning(self, "Thiếu biến", "Pairplot cần ít nhất 2 biến.")
+                    return
+                fig = plotly_pairplot(df_filtered, self.selected_vars)
+            elif chart_type == "Pie":
+                fig = plotly_pie(df_filtered, self.selected_vars)
+            elif chart_type == "Treemap":
+                fig = plotly_treemap(df_filtered, self.selected_vars)
+            elif chart_type == "Sunburst":
+                fig = plotly_sunburst(df_filtered, self.selected_vars)
+            elif chart_type == "Parallel Coordinates":
+                if len(self.selected_vars) < 2:
+                    QMessageBox.warning(self, "Thiếu biến", "Parallel Coordinates cần ít nhất 2 biến numeric.")
+                    return
+                fig = plotly_parcoords(df_filtered, self.selected_vars)
+        except Exception as e:
+            QMessageBox.critical(self, "Lỗi", f"Không vẽ được: {e}")
+            return
+
+        if fig is not None:
+            self._last_fig = fig
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+            pio.write_html(fig, file=tmp.name, include_plotlyjs=True, full_html=True,
+                          auto_open=False, config=plot_config)
+            self._last_html_path = tmp.name
+            self.plot_view.load(QUrl.fromLocalFile(tmp.name))
+        elif chart_type in ["Histogram", "Boxplot", "Violin", "Boxen", "Histogram + Boxplot",
+                            "Heatmap Correlation", "Z-score Scatter", "Pairplot",
+                            "Pie", "Treemap", "Sunburst", "Parallel Coordinates"]:
+            QMessageBox.warning(self, "Không vẽ được", "Dữ liệu không đủ hoặc biến không hợp lệ.")
+
+    def get_last_html_path(self) -> str | None:
+        """Đường dẫn file HTML đồ thị cuối — Monitoring load trực tiếp (giống tab Plotly)."""
+        return self._last_html_path or None
+
+    def get_last_html_content(self) -> str | None:
+        """Nội dung HTML đồ thị cuối — dùng khi lưu config hoặc khi không dùng path."""
+        if not self._last_html_path:
+            return None
+        try:
+            with open(self._last_html_path, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception:
+            return None

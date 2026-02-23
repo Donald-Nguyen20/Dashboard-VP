@@ -236,10 +236,10 @@ class MasterWindow(QMainWindow):
         ml_widget.setStyleSheet(ml_win.styleSheet())
         self.tab_widget.addTab(ml_widget, "🤖 ML Application")
 
-        # Tab 3: Monitoring System (truyền df_provider để lấy dữ liệu từ Data Analyzing)
+        # Tab 3: Monitoring System (Get Plot lấy đồ thị từ tab Plotly - cùng cách thức như Plot: figure → ảnh)
         monitoring_win = Monitoring_Tab(
             df_provider=self.main_window.get_current_df_for_ml,
-            plot_provider=lambda: getattr(self.main_window, "tab2", None),
+            plot_provider=lambda: getattr(self.main_window, "plotly_tab", None),
         )
         monitoring_widget = monitoring_win.centralWidget()
         self.tab_widget.addTab(monitoring_widget, "📡 Monitoring System")
