@@ -226,7 +226,7 @@ class SystemContentWidget(QWidget):
 
         max_cols = max(row_cols) if row_cols else 1
 
-        ROW_H = 450  # 280/320/360 tùy thích
+        ROW_H = 700  # 280/320/360 tùy thích
 
         for r in range(rows):
             row_widget = QWidget()
@@ -501,6 +501,7 @@ class SystemContentWidget(QWidget):
 
         default_name = f"{title.strip().replace('/', '-').replace('\\', '-')}.{fmt}"
 
+        # 1) hỏi nơi lưu trước
         if fmt == "docx":
             save_path, _ = QFileDialog.getSaveFileName(
                 self, "Save Report (Word)", default_name, "Word Document (*.docx)"
@@ -509,7 +510,6 @@ class SystemContentWidget(QWidget):
                 return
             if not save_path.lower().endswith(".docx"):
                 save_path += ".docx"
-            export_report_docx(save_path, title, self)
         else:
             save_path, _ = QFileDialog.getSaveFileName(
                 self, "Save Report (PDF)", default_name, "PDF File (*.pdf)"
@@ -519,41 +519,61 @@ class SystemContentWidget(QWidget):
             if not save_path.lower().endswith(".pdf"):
                 save_path += ".pdf"
 
-            # 1) Temp folder
-            temp_dir = os.path.join(tempfile.gettempdir(), "dashboard_reports")
-            os.makedirs(temp_dir, exist_ok=True)
-            for fn in os.listdir(temp_dir):
-                if fn.lower().startswith("cell_") and fn.lower().endswith(".png"):
-                    try:
-                        os.remove(os.path.join(temp_dir, fn))
-                    except Exception:
-                        pass
+        # 2) Temp folder (dùng chung cho cả PDF & DOCX)
+        temp_dir = os.path.join(tempfile.gettempdir(), "dashboard_reports")
+        os.makedirs(temp_dir, exist_ok=True)
+        for fn in os.listdir(temp_dir):
+            if fn.lower().startswith("cell_") and fn.lower().endswith(".png"):
+                try:
+                    os.remove(os.path.join(temp_dir, fn))
+                except Exception:
+                    pass
 
-            # 2) Chụp toàn bộ dashboard thành 1 ảnh lớn
-            img_path = os.path.join(temp_dir, "cell_r1_c1.png")
-            save_widget_high_res(self.grid_container, img_path, scale_factor=3)  # 3 hoặc 4
+        # 3) Chụp từng ROW dashboard → mỗi row = 1 ảnh
+        image_paths = []
 
-            # 3) PDF config (A4 ngang sẽ fill tốt hơn với chart dài)
-            from reportlab.lib.pagesizes import A4, landscape
-            cfg = PdfLayoutConfig(
-                pagesize=landscape(A4),
-                split_tall_images=True,
-                title_on_first_page_only=False,
-                always_full_width=True,
-                margin_left=5*mm,
-                margin_right=5*mm,
-                margin_top=5*mm,
-                margin_bottom=5*mm
-            )
+        for i in range(self.rows_layout.count()):
+            row_widget = self.rows_layout.itemAt(i).widget()
+            if row_widget is None:
+                continue
 
-            # 4) Export PDF
+            img_path = os.path.join(temp_dir, f"cell_row_{i+1}.png")
+            save_widget_high_res(row_widget, img_path, scale_factor=3)
+            image_paths.append(img_path)
+
+        # 4) Config đồng bộ giữa PDF & DOCX (A4 ngang như anh đang dùng)
+        cfg = PdfLayoutConfig(
+            pagesize=landscape(A4),
+            split_tall_images=True,
+            title_on_first_page_only=False,
+            always_full_width=True,
+            margin_left=5*mm,
+            margin_right=5*mm,
+            margin_top=5*mm,
+            margin_bottom=5*mm
+        )
+
+        # 5) Export theo định dạng
+        if fmt == "pdf":
             export_report_pdf(
                 save_path,
                 title,
                 self,
                 temp_image_dir=temp_dir,
+                image_paths=image_paths,
                 cfg=cfg
             )
-
+        else:
+            # ✅ Quan trọng: truyền temp_image_dir + cfg (và ảnh đã chụp)
+            # Nếu exporter của anh hỗ trợ image_paths thì truyền thêm image_paths=[img_path].
+            # Nếu exporter tự collect cell_*.png thì chỉ cần temp_image_dir.
+            export_report_docx(
+                save_path,
+                title,
+                self,
+                temp_image_dir=temp_dir,
+                image_paths=image_paths,
+                cfg=cfg
+            )
 
         QMessageBox.information(self, "Export Report", f"Đã xuất báo cáo:\n{save_path}")

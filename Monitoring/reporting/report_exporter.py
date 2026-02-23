@@ -32,7 +32,7 @@ from reportlab.platypus import (
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
-
+from docx.enum.section import WD_ORIENT
 # ===== Pillow (for splitting tall images) =====
 try:
     from PIL import Image as PILImage
@@ -381,21 +381,146 @@ def export_report_pdf(
     )
 
 
-def export_report_docx(save_path: str, title: str, parent_widget=None) -> None:
+def export_report_docx(
+    save_path: str,
+    title: str,
+    parent_widget=None,
+    *,
+    temp_image_dir: Optional[str] = None,
+    image_paths: Optional[List[str]] = None,
+    cfg: Optional[PdfLayoutConfig] = None,   # reuse PdfLayoutConfig cho đồng bộ tham số
+) -> None:
     """
-    Basic DOCX exporter (safe fallback).
-    If your project already has a richer docx exporter, keep yours.
+    Export report DOCX theo style giống PDF:
+    - A4, margin giống PDF config
+    - Mỗi ảnh (layout/cell) = 1 trang (page break)
+    - Nếu ảnh quá cao: tự split thành nhiều trang (giống PDF)
     """
     try:
         from docx import Document
+        from docx.shared import Mm, Pt
+        from docx.enum.text import WD_BREAK
     except Exception as e:
         raise RuntimeError("python-docx is required. Install: pip install python-docx") from e
 
-    doc = Document()
-    doc.add_heading(title, level=0)
-    doc.add_paragraph("Auto-generated report.")
-    doc.save(save_path)
+    cfg = cfg or PdfLayoutConfig()
+    temp_image_dir = temp_image_dir or _temp_dir("dashboard_reports")
 
+    # Nếu không truyền image_paths thì auto collect "cell_*.png" trong temp folder
+    if image_paths is None:
+        image_paths = _collect_cell_images_from_temp(temp_image_dir)
+
+    doc = Document()
+
+    # ===== Setup A4 LANDSCAPE + margins (giống PDF landscape(A4)) =====
+
+
+    section = doc.sections[0]
+    section.orientation = WD_ORIENT.LANDSCAPE
+
+    # python-docx: đổi orientation phải swap width/height
+    section.page_width, section.page_height = section.page_height, section.page_width
+
+    # set chắc chắn A4 ngang
+    section.page_width = Mm(297)
+    section.page_height = Mm(210)
+
+    section.left_margin = Mm(int(cfg.margin_left / mm))
+    section.right_margin = Mm(int(cfg.margin_right / mm))
+    section.top_margin = Mm(int(cfg.margin_top / mm))
+    section.bottom_margin = Mm(int(cfg.margin_bottom / mm))
+
+    # Usable area (mm) để fit ảnh
+    usable_w_pt, usable_h_pt = _get_usable_area(cfg)
+    usable_w_mm = usable_w_pt / mm
+    usable_h_mm = usable_h_pt / mm
+
+    # ===== Helpers =====
+    def _get_image_size_mm(path: str) -> Tuple[float, float]:
+        """Return (w_mm, h_mm) using PIL dpi if available, fallback 96 dpi."""
+        if PILImage is None:
+            # Fallback thô: assume 96dpi
+            im = PILImage.open(path)  # type: ignore
+        im = PILImage.open(path)  # PILImage chắc chắn có nếu vào nhánh này
+        w_px, h_px = im.size
+        dpi = im.info.get("dpi", (96, 96))
+        dpi_x = dpi[0] if dpi and dpi[0] else 96
+        dpi_y = dpi[1] if dpi and dpi[1] else 96
+        w_in = w_px / float(dpi_x)
+        h_in = h_px / float(dpi_y)
+        return w_in * 25.4, h_in * 25.4
+
+    def _add_picture_fit(path: str, *, add_page_break_before: bool):
+        # fit theo pixel ratio (ổn định hơn DPI)
+        if PILImage is None:
+            fit_w_mm = usable_w_mm
+        else:
+            im = PILImage.open(path)
+            w_px, h_px = im.size
+            if w_px <= 0 or h_px <= 0:
+                fit_w_mm = usable_w_mm
+            else:
+                fit_w_mm = usable_w_mm
+                fit_h_mm = fit_w_mm * (h_px / w_px)
+                safety = 0.96  # giảm chút để Word khỏi tự nhảy trang
+                if fit_h_mm > usable_h_mm * safety:
+                    fit_w_mm = (usable_h_mm * safety) * (w_px / h_px)
+
+        p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = Pt(0)
+
+        if add_page_break_before:
+            pb = doc.add_paragraph()
+            pb.paragraph_format.space_before = Pt(0)
+            pb.paragraph_format.space_after = Pt(0)
+            pb.add_run().add_break(WD_BREAK.PAGE)
+
+        p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = Pt(0)
+        p.add_run().add_picture(path, width=Mm(int(max(10.0, fit_w_mm))))
+
+    # ===== Title page (giống PDF: title rồi PageBreak) =====
+    doc.add_paragraph(title).runs[0].font.size = Pt(cfg.title_font_size)
+    doc.add_paragraph("Monitoring Layout").runs[0].font.size = Pt(cfg.section_font_size)
+
+    if cfg.title_on_first_page_only and image_paths:
+        pb = doc.add_paragraph()
+        pb.paragraph_format.space_before = Pt(0)
+        pb.paragraph_format.space_after = Pt(0)
+        pb.add_run().add_break(WD_BREAK.PAGE)
+
+    if not image_paths:
+        doc.add_paragraph("No exported images found to include in this report.")
+        doc.save(save_path)
+        return
+
+   # ===== Pages: images (NO doc.add_page_break) =====
+    # gom toàn bộ part để biết part cuối cùng (khỏi page break dư)
+    _parts_list: List[str] = []
+
+    for img_path in image_paths:
+        if not os.path.exists(img_path):
+            continue
+
+        if cfg.split_tall_images:
+            prefix = os.path.splitext(os.path.basename(img_path))[0] + "_part"
+            if cfg.max_split_part_px > 0:
+                part_h_px = cfg.max_split_part_px
+            else:
+                part_h_px = _estimate_split_height_px(img_path, usable_w_pt, usable_h_pt)
+            parts = _split_image(img_path, temp_image_dir, part_h_px, prefix)
+        else:
+            parts = [img_path]
+
+        for part in parts:
+            if os.path.exists(part):
+                _parts_list.append(part)
+
+    for i, part in enumerate(_parts_list, start=1):
+        _add_picture_fit(part, add_page_break_before=(i != 1))
+    doc.save(save_path)
 
 # ============================================================
 # Optional: quick CLI test (run this file directly)
