@@ -155,6 +155,9 @@ class PlotlyTab(QWidget):
     def update_plot(self, df: pd.DataFrame):
         self.df = df.copy()
 
+        if "datetime" in self.df.columns and "Datetime" not in self.df.columns:
+            self.df.rename(columns={"datetime": "Datetime"}, inplace=True)
+
         if 'Datetime' in self.df.columns:
             self.df['Datetime'] = pd.to_datetime(self.df['Datetime'])
             self.start_time.setDateTime(QDateTime(self.df['Datetime'].min()))
@@ -378,3 +381,9 @@ class PlotlyTab(QWidget):
                 return f.read()
         except Exception:
             return None
+    def get_current_plotly_spec(self) -> dict:
+        return {
+            "chart_type": self.chart_type_combo.currentText(),
+            "selected_vars": list(self.selected_vars),
+            "range_spin": int(self.range_spin.value()),
+        }

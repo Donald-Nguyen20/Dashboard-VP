@@ -35,7 +35,9 @@ from PySide6.QtGui import QPixmap
 from reportlab.lib.pagesizes import A4, landscape
 from PySide6.QtGui import QImage, QPainter
 from PySide6.QtCore import QPoint
-
+from Monitoring.widgets.plotly_spec_cell import PlotlySpecCell
+from PySide6.QtWidgets import QDateTimeEdit
+from PySide6.QtCore import QDateTime
 def save_widget_high_res(widget, path, scale_factor=3):
     w = max(1, widget.width())
     h = max(1, widget.height())
@@ -153,7 +155,27 @@ class SystemContentWidget(QWidget):
         toolbar.addWidget(self.btn_export)
         toolbar.addStretch()
         main_layout.addLayout(toolbar)
+        # ===== Time range (global) =====
+        rangebar = QHBoxLayout()
+        rangebar.addWidget(QLabel("⏱ From:"))
 
+        self.dt_start = QDateTimeEdit(QDateTime.currentDateTime().addSecs(-3600))
+        self.dt_start.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.dt_start.setCalendarPopup(True)
+        rangebar.addWidget(self.dt_start)
+
+        rangebar.addWidget(QLabel("To:"))
+        self.dt_end = QDateTimeEdit(QDateTime.currentDateTime())
+        self.dt_end.setDisplayFormat("yyyy-MM-dd HH:mm")
+        self.dt_end.setCalendarPopup(True)
+        rangebar.addWidget(self.dt_end)
+
+        self.btn_apply_range = QPushButton("Apply")
+        self.btn_apply_range.clicked.connect(self._on_apply_time_range)
+        rangebar.addStretch()
+        rangebar.addWidget(self.btn_apply_range)
+
+        main_layout.addLayout(rangebar)
         # Scroll + rows container
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -231,6 +253,14 @@ class SystemContentWidget(QWidget):
                     "type": "note",
                     "text_content": w.get_content(),
                 })
+            elif isinstance(w, PlotlySpecCell):
+                cells.append({
+                    "cell_id": cell_id,
+                    "row": r,
+                    "col": c,
+                    "type": "plotly_spec",
+                    "plotly_spec": getattr(w, "spec", {}) or {},
+                })
         return {
             "row_cols": self.layout_config.get("row_cols", [1]),
             "cells": cells,
@@ -282,13 +312,19 @@ class SystemContentWidget(QWidget):
                         w.on_clear = lambda row=r, col=c: self._on_clear_cell(row, col)
                         w.on_refresh = lambda row=r, col=c: self._on_refresh_plot_image_cell(row, col)
 
-                    elif ctype == "plotly_embed":
-                        w = PlotlyEmbedCell(
-                            html_content=cell_info.get("html_content", ""),
-                            html_path=cell_info.get("html_path") or None,
+                    elif ctype == "plotly_spec":
+                        w = PlotlySpecCell(
+                            spec=cell_info.get("plotly_spec", {}) or {},
+                            df_provider=self.df_provider,
+                            time_provider=lambda: (
+                                self.dt_start.dateTime().toPython(),
+                                self.dt_end.dateTime().toPython()
+                            ),
                         )
+
+                        # refresh cell = rerender
+                        w.on_refresh = lambda row=r, col=c: self._on_apply_time_range()
                         w.on_clear = lambda row=r, col=c: self._on_clear_cell(row, col)
-                        w.on_refresh = lambda row=r, col=c: self._on_refresh_plotly_embed_cell(row, col)
 
                     else:
                         w = TextCellWidget(initial_text=cell_info.get("text_content", ""))
@@ -361,39 +397,30 @@ class SystemContentWidget(QWidget):
             return None
 
     def _on_get_plot(self, row: int, col: int) -> None:
-        """Lấy đồ thị từ tab Plotly sang ô — load từ file giống tab Plotly (QWebEngineView.load file)."""
         self.active_row = row
 
         plotly_tab = self.plot_provider() if self.plot_provider else None
         if plotly_tab is None:
             QMessageBox.warning(self, "Chưa có đồ thị", "Không tìm thấy tab Plotly.")
             return
-        path_getter = getattr(plotly_tab, "get_last_html_path", None)
-        content_getter = getattr(plotly_tab, "get_last_html_content", None)
-        html_path = path_getter() if callable(path_getter) else None
-        html_content = content_getter() if callable(content_getter) else None
-        if not html_content and not html_path:
-            QMessageBox.warning(
-                self,
-                "Chưa có đồ thị",
-                "Vẽ đồ thị tại tab Plotly (Data Analyzing) trước, sau đó chuột phải → Get Plot."
-            )
+
+        spec_getter = getattr(plotly_tab, "get_current_plotly_spec", None)
+        if not callable(spec_getter):
+            QMessageBox.warning(self, "Thiếu hỗ trợ", "PlotlyTab chưa có get_current_plotly_spec().")
             return
-        if not html_content and html_path:
-            try:
-                with open(html_path, "r", encoding="utf-8") as f:
-                    html_content = f.read()
-            except Exception:
-                html_content = ""
+
+        spec = spec_getter()
+        if not spec or not spec.get("selected_vars"):
+            QMessageBox.warning(self, "Chưa chọn biến", "Vào tab Plotly chọn biến + loại chart trước.")
+            return
 
         cell_id = str(uuid.uuid4())[:8]
         self.layout_config["cells"].append({
             "cell_id": cell_id,
             "row": row,
             "col": col,
-            "type": "plotly_embed",
-            "html_content": html_content or "",
-            "html_path": html_path or "",
+            "type": "plotly_spec",
+            "plotly_spec": spec,
         })
         self._rebuild_grid()
         self._mark_dirty()
@@ -620,3 +647,8 @@ class SystemContentWidget(QWidget):
             )
 
         QMessageBox.information(self, "Export Report", f"Đã xuất báo cáo:\n{save_path}")
+    def _on_apply_time_range(self) -> None:
+        # rerender tất cả cell plotly_spec
+        for w in self.cell_widgets.values():
+            if isinstance(w, PlotlySpecCell):
+                w.rerender()
