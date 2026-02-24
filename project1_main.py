@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QMenu
 from PySide6.QtWidgets import QLineEdit
 from PySide6.QtCore import Qt
 from project1_main_tab.load_data import CsvCleanerWidget
-from project1_main_tab.plot_tab import PlotTab
+# from project1_main_tab.plot_tab import PlotTab
 from matplotlib.backends.backend_qt5 import NavigationToolbar2QT as NavigationToolbar
 from project1_main_tab.drift_tab import DriftMonitorTab
 from project1_main_tab.predict_tab import PredictTab
@@ -271,8 +271,8 @@ QPushButton:pressed {
         self.tab_widget.addTab(tab1, "🏠 Home")
 
         # Tab 2 - Plot
-        self.tab2 = PlotTab(parent=self)
-        self.tab_widget.addTab(self.tab2, "📈 Plot")
+        # self.tab2 = PlotTab(parent=self)
+        # self.tab_widget.addTab(self.tab2, "📈 Plot")
         # Tab 6 - Plotly
         self.plotly_tab = PlotlyTab(parent=self)
         self.tab_widget.addTab(self.plotly_tab, "🌐 Plotly")
