@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 from PySide6.QtWidgets import QDialog
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from Monitoring.widgets.placeholder_cell import PlaceholderCell
 from Monitoring.plot_binding.plot_bound_cell import PlotBoundCell
 from Monitoring.widgets.text_cell import TextCellWidget
@@ -51,6 +51,32 @@ def save_widget_high_res(widget, path, scale_factor=3):
 
     painter.end()
     img.save(path)
+def normalize_row_image(img_path: str, target_w_px: int = 2400, min_h_px: int = 1400):
+    """Ép ảnh về width chuẩn, và đảm bảo height không bị lùn (ổn định mọi máy)."""
+    try:
+        from PIL import Image as PILImage
+    except Exception:
+        return
+
+    try:
+        im = PILImage.open(img_path)
+        w, h = im.size
+        if w <= 0 or h <= 0:
+            return
+
+        # scale theo width chuẩn
+        scale = target_w_px / float(w)
+        new_w = target_w_px
+        new_h = int(h * scale)
+
+        # đảm bảo không lùn hơn mức tối thiểu
+        if new_h < min_h_px:
+            new_h = min_h_px
+
+        im = im.resize((new_w, new_h), PILImage.LANCZOS)
+        im.save(img_path)
+    except Exception:
+        pass
 def _default_layout() -> dict:
     # New format: row_cols allows each row to have different number of columns.
     # Example: {"row_cols": [1, 3, 2], "cells": [...]}
@@ -66,6 +92,7 @@ def _get_cell_at(cells: list, row: int, col: int) -> dict | None:
 
 
 class SystemContentWidget(QWidget):
+    layout_changed = Signal()
     """
     Panel nội dung - layout theo hàng (mỗi hàng có thể có số cột khác nhau).
     Mỗi ô: right-click → Get Plot | Note.
@@ -164,7 +191,8 @@ class SystemContentWidget(QWidget):
         self.active_row = min(self.active_row, len(row_cols) - 1)
 
         self._rebuild_grid()
-
+    def _mark_dirty(self) -> None:
+        self.layout_changed.emit()
     def get_layout_config(self) -> dict:
         """Lấy config hiện tại."""
         cells = []
@@ -226,7 +254,7 @@ class SystemContentWidget(QWidget):
 
         max_cols = max(row_cols) if row_cols else 1
 
-        ROW_H = 700  # 280/320/360 tùy thích
+        ROW_H = 900  # 280/320/360 tùy thích
 
         for r in range(rows):
             row_widget = QWidget()
@@ -368,6 +396,7 @@ class SystemContentWidget(QWidget):
             "html_path": html_path or "",
         })
         self._rebuild_grid()
+        self._mark_dirty()
 
     def _on_note(self, row: int, col: int) -> None:
         """Thêm ô Note tại (row, col)."""
@@ -382,12 +411,14 @@ class SystemContentWidget(QWidget):
             "text_content": "",
         })
         self._rebuild_grid()
+        self._mark_dirty()
 
     def _on_clear_cell(self, row: int, col: int) -> None:
         """Xóa nội dung ô → trở về placeholder."""
         cells = self.layout_config.get("cells", [])
         self.layout_config["cells"] = [c for c in cells if not (c.get("row") == row and c.get("col") == col)]
         self._rebuild_grid()
+        self._mark_dirty()
 
     def _on_refresh_plot_cell(self, row: int, col: int) -> None:
         """Re-bind PlotSpec mới nhất từ tab Plot cho ô (row, col)."""
@@ -402,6 +433,7 @@ class SystemContentWidget(QWidget):
                 c["plot_spec"] = spec
                 break
         self._rebuild_grid()
+        self._mark_dirty()
 
     def _on_refresh_plot_image_cell(self, row: int, col: int) -> None:
         """Chụp lại đồ thị từ tab Plot (matplotlib) cho ô ảnh (row, col)."""
@@ -415,6 +447,7 @@ class SystemContentWidget(QWidget):
                 c["image_base64"] = b64
                 break
         self._rebuild_grid()
+        self._mark_dirty()
 
     def _on_refresh_plotly_embed_cell(self, row: int, col: int) -> None:
         """Lấy lại nguyên đồ thị từ tab Plotly cho ô plotly_embed (row, col)."""
@@ -428,6 +461,7 @@ class SystemContentWidget(QWidget):
                 c["html_content"] = html_content
                 break
         self._rebuild_grid()
+        self._mark_dirty()
 
     def _on_add_row(self) -> None:
         row_cols = self.layout_config.get("row_cols") or [1]
@@ -436,6 +470,7 @@ class SystemContentWidget(QWidget):
         self.layout_config["row_cols"] = row_cols
         self.active_row = len(row_cols) - 1
         self._rebuild_grid()
+        self._mark_dirty()
 
     def _on_add_col(self) -> None:
         row_cols = self.layout_config.get("row_cols") or [1]
@@ -446,7 +481,7 @@ class SystemContentWidget(QWidget):
         self.layout_config["row_cols"] = row_cols
         self.active_row = r
         self._rebuild_grid()
-
+        self._mark_dirty()
     def _on_remove_col(self) -> None:
         row_cols = self.layout_config.get("row_cols") or [1]
         if not row_cols:
@@ -465,6 +500,9 @@ class SystemContentWidget(QWidget):
         self.layout_config["row_cols"] = row_cols
         self.active_row = r
         self._rebuild_grid()
+        self._mark_dirty()
+
+
 
     def _on_remove_row(self) -> None:
         row_cols = self.layout_config.get("row_cols") or [1]
@@ -487,9 +525,10 @@ class SystemContentWidget(QWidget):
         self.layout_config["row_cols"] = row_cols
         self.active_row = min(r, len(row_cols) - 1)
         self._rebuild_grid()
-
+        self._mark_dirty()
     def _on_refresh(self) -> None:
         self._rebuild_grid()
+        self._mark_dirty()
     def _on_export_report(self) -> None:
         dlg = ExportReportDialog(self)
         if dlg.exec() != QDialog.Accepted:
@@ -539,6 +578,10 @@ class SystemContentWidget(QWidget):
 
             img_path = os.path.join(temp_dir, f"cell_row_{i+1}.png")
             save_widget_high_res(row_widget, img_path, scale_factor=3)
+
+            # ✅ CHÌA KHOÁ: chuẩn hoá ảnh để mọi máy ra như nhau + cao hơn
+            normalize_row_image(img_path, target_w_px=2400, min_h_px=1000)
+
             image_paths.append(img_path)
 
         # 4) Config đồng bộ giữa PDF & DOCX (A4 ngang như anh đang dùng)

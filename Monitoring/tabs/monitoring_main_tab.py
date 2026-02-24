@@ -172,13 +172,27 @@ class MonitoringMainTab(QWidget):
         right_layout = QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
 
+        # Header row: Title + Unsaved badge
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+
         self.content_header = QLabel("Monitoring System")
         font = QFont()
         font.setPointSize(18)
         font.setBold(True)
         self.content_header.setFont(font)
-        self.content_header.setStyleSheet("color: #1b2a38; padding: 16px 24px 8px 24px;")
-        right_layout.addWidget(self.content_header)
+        self.content_header.setStyleSheet("color: #1b2a38; padding: 16px 10px 8px 24px;")
+        header_row.addWidget(self.content_header)
+
+        self.unsaved_badge = QLabel("● Unsaved")
+        self.unsaved_badge.setStyleSheet(
+            "color: #d97706; font-weight: 700; padding: 16px 24px 8px 0;"
+        )
+        self.unsaved_badge.hide()  # mặc định ẩn
+        header_row.addWidget(self.unsaved_badge)
+
+        header_row.addStretch(1)
+        right_layout.addLayout(header_row)
 
         self.stacked_right = QStackedWidget()
         self.placeholder_widget = QWidget()
@@ -196,6 +210,7 @@ class MonitoringMainTab(QWidget):
         self.stacked_right.addWidget(self.placeholder_widget)
 
         self.system_content = SystemContentWidget(df_provider=self.df_provider, plot_provider=self.plot_provider)
+        self.system_content.layout_changed.connect(self._on_layout_changed)
         self.stacked_right.addWidget(self.system_content)
         right_layout.addWidget(self.stacked_right, 1)
         main_layout.addWidget(right, 1)
@@ -248,6 +263,8 @@ class MonitoringMainTab(QWidget):
         self.content_header.setText(cfg.name)
         layout_cfg = (cfg.config or {}).get("layout", {})
         self.system_content.set_layout_config(layout_cfg)
+        # Khi vừa chọn system thì xem như đang “đã đồng bộ” với storage (chưa có thay đổi)
+        self.unsaved_badge.hide()
         self.stacked_right.setCurrentWidget(self.system_content)
         self.btn_delete.setEnabled(True)
         self._update_checked_state(cfg.id)
@@ -268,7 +285,12 @@ class MonitoringMainTab(QWidget):
                     w.setChecked(True)
                 elif isinstance(w, QPushButton):
                     w.setChecked(False)
-
+    def _on_layout_changed(self) -> None:
+        if self.current_system is None:
+            return
+        self._dirty = True
+        self.btn_save.setEnabled(True)
+        self.unsaved_badge.show()
     def _on_add(self) -> None:
         name, ok = QInputDialog.getText(
             self, "Tạo hệ thống mới", "Tên hệ thống cần giám sát:"
@@ -294,6 +316,7 @@ class MonitoringMainTab(QWidget):
         if save_all_systems(self.systems):
             self._dirty = False
             self.btn_save.setEnabled(False)
+            self.unsaved_badge.hide()
             QMessageBox.information(
                 self, "Đã lưu",
                 f"Đã lưu {len(self.systems)} hệ thống vào Monitoring storage/"
