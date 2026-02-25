@@ -15,16 +15,16 @@ from project1_main_tab.Plotly_modules.plotly_bar_max import plotly_bar_max
 from project1_main_tab.Plotly_modules.plotly_histogram import plotly_histogram
 from project1_main_tab.Plotly_modules.plotly_boxplot import plotly_boxplot
 from project1_main_tab.Plotly_modules.plotly_violin import plotly_violin
-from project1_main_tab.Plotly_modules.plotly_boxen import plotly_boxen
 from project1_main_tab.Plotly_modules.plotly_heatmap import plotly_heatmap
 from project1_main_tab.Plotly_modules.plotly_zscore_scatter import plotly_zscore_scatter
 from project1_main_tab.Plotly_modules.plotly_pairplot import plotly_pairplot
 from project1_main_tab.Plotly_modules.plotly_hist_box import plotly_hist_box
 from project1_main_tab.Plotly_modules.plotly_pie import plotly_pie
 from project1_main_tab.Plotly_modules.plotly_area import plotly_area
-from project1_main_tab.Plotly_modules.plotly_treemap import plotly_treemap
-from project1_main_tab.Plotly_modules.plotly_sunburst import plotly_sunburst
 from project1_main_tab.Plotly_modules.plotly_parcoords import plotly_parcoords
+from project1_main_tab.Plotly_modules.plotly_spc_control_chart import plotly_spc_i_chart
+from project1_main_tab.Plotly_modules.plotly_rolling_band import plotly_rolling_band
+from project1_main_tab.Plotly_modules.plotly_mw_binned_scatter import plotly_mw_binned_scatter
 from project1_main_tab.plot_tab import MultiRangeDialog
 IGNORED_COLUMNS = {'datetime', 'date', 'time', 'sourcefolder'}
 
@@ -107,8 +107,11 @@ class PlotlyTab(QWidget):
         self.chart_type_combo.addItems([
             "Line", "Area", "Scatter", "Bar (Max)", "Z-score Scatter",
             "Heatmap Correlation", "Histogram", "Boxplot",
-            "Histogram + Boxplot", "Violin", "Boxen", "Pairplot",
-            "Pie", "Treemap", "Sunburst", "Parallel Coordinates",
+            "Histogram + Boxplot", "Violin", "Pairplot",
+            "Pie", "Parallel Coordinates","SPC Control (I-Chart)",
+"Rolling Band",
+"MW-binned Scatter",
+
         ])
 
         self.btn_variable = QPushButton("🧩 Variable")
@@ -143,7 +146,14 @@ class PlotlyTab(QWidget):
         topbar.addWidget(btn_plot)
 
         root.addLayout(topbar)
+        self.window_spin = QSpinBox()
+        self.window_spin.setMinimum(10)
+        self.window_spin.setMaximum(5000)
+        self.window_spin.setValue(60)
+        self.window_spin.setToolTip("Rolling/SPC window (số điểm)")
 
+        topbar.addWidget(QLabel("Window:"))
+        topbar.addWidget(self.window_spin)
         # ===== Plot view =====
         self.plot_view = QWebEngineView()
         self.plot_view.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -322,8 +332,7 @@ class PlotlyTab(QWidget):
                 fig = plotly_boxplot(df_filtered, self.selected_vars)
             elif chart_type == "Violin":
                 fig = plotly_violin(df_filtered, self.selected_vars)
-            elif chart_type == "Boxen":
-                fig = plotly_boxen(df_filtered, self.selected_vars)
+
             elif chart_type == "Histogram + Boxplot":
                 fig = plotly_hist_box(df_filtered, self.selected_vars)
             elif chart_type == "Heatmap Correlation":
@@ -343,10 +352,51 @@ class PlotlyTab(QWidget):
                 fig = plotly_pairplot(df_filtered, self.selected_vars)
             elif chart_type == "Pie":
                 fig = plotly_pie(df_filtered, self.selected_vars)
-            elif chart_type == "Treemap":
-                fig = plotly_treemap(df_filtered, self.selected_vars)
-            elif chart_type == "Sunburst":
-                fig = plotly_sunburst(df_filtered, self.selected_vars)
+            elif chart_type == "SPC Control (I-Chart)":
+                if "Datetime" not in df_filtered.columns:
+                    QMessageBox.warning(self, "Thiếu Datetime", "SPC cần cột Datetime.")
+                    return
+                selected_tag = self.selected_vars[0]
+                window = int(self.window_spin.value())
+                fig = plotly_spc_i_chart(
+                    df=df_filtered,
+                    x_col="Datetime",
+                    y_col=selected_tag,
+                    window=window,
+                    sigma=3.0
+                )
+
+            elif chart_type == "Rolling Band":
+                if "Datetime" not in df_filtered.columns:
+                    QMessageBox.warning(self, "Thiếu Datetime", "Rolling Band cần cột Datetime.")
+                    return
+                selected_tag = self.selected_vars[0]
+                window = int(self.window_spin.value())
+                fig = plotly_rolling_band(
+                    df=df_filtered,
+                    x_col="Datetime",
+                    y_col=selected_tag,
+                    window=window,
+                    band_sigma=1.0
+                )
+
+            elif chart_type == "MW-binned Scatter":
+                if "Datetime" not in df_filtered.columns:
+                    QMessageBox.warning(self, "Thiếu Datetime", "MW-binned Scatter cần cột Datetime.")
+                    return
+                if "NET MW" not in df_filtered.columns:
+                    QMessageBox.warning(self, "Thiếu NET MW", "Cần cột 'NET MW' để chia bin theo tải.")
+                    return
+                selected_tag = self.selected_vars[0]
+                fig = plotly_mw_binned_scatter(
+                    df=df_filtered,
+                    x_col="Datetime",
+                    y_col=selected_tag,
+                    mw_col="NET MW",
+                    bin_size=50.0,
+                    max_bins=8
+                )
+
             elif chart_type == "Parallel Coordinates":
                 if len(self.selected_vars) < 2:
                     QMessageBox.warning(self, "Thiếu biến", "Parallel Coordinates cần ít nhất 2 biến numeric.")
@@ -363,10 +413,11 @@ class PlotlyTab(QWidget):
                           auto_open=False, config=plot_config)
             self._last_html_path = tmp.name
             self.plot_view.load(QUrl.fromLocalFile(tmp.name))
-        elif chart_type in ["Histogram", "Boxplot", "Violin", "Boxen", "Histogram + Boxplot",
-                            "Heatmap Correlation", "Z-score Scatter", "Pairplot",
-                            "Pie", "Treemap", "Sunburst", "Parallel Coordinates"]:
-            QMessageBox.warning(self, "Không vẽ được", "Dữ liệu không đủ hoặc biến không hợp lệ.")
+        elif chart_type in ["Histogram", "Boxplot", "Violin", "Histogram + Boxplot",
+                    "Heatmap Correlation", "Z-score Scatter", "Pairplot",
+                    "Pie", "Parallel Coordinates",
+                    "SPC Control (I-Chart)", "Rolling Band", "MW-binned Scatter", "Deviation Baseline"]:
+            QMessageBox.warning(...)
 
     def get_last_html_path(self) -> str | None:
         """Đường dẫn file HTML đồ thị cuối — Monitoring load trực tiếp (giống tab Plotly)."""

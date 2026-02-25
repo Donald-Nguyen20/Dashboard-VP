@@ -15,16 +15,19 @@ from project1_main_tab.Plotly_modules.plotly_bar_max import plotly_bar_max
 from project1_main_tab.Plotly_modules.plotly_histogram import plotly_histogram
 from project1_main_tab.Plotly_modules.plotly_boxplot import plotly_boxplot
 from project1_main_tab.Plotly_modules.plotly_violin import plotly_violin
-from project1_main_tab.Plotly_modules.plotly_boxen import plotly_boxen
+
 from project1_main_tab.Plotly_modules.plotly_heatmap import plotly_heatmap
 from project1_main_tab.Plotly_modules.plotly_zscore_scatter import plotly_zscore_scatter
 from project1_main_tab.Plotly_modules.plotly_pairplot import plotly_pairplot
 from project1_main_tab.Plotly_modules.plotly_hist_box import plotly_hist_box
 from project1_main_tab.Plotly_modules.plotly_pie import plotly_pie
 from project1_main_tab.Plotly_modules.plotly_area import plotly_area
-from project1_main_tab.Plotly_modules.plotly_treemap import plotly_treemap
-from project1_main_tab.Plotly_modules.plotly_sunburst import plotly_sunburst
+
 from project1_main_tab.Plotly_modules.plotly_parcoords import plotly_parcoords
+from project1_main_tab.Plotly_modules.plotly_spc_control_chart import plotly_spc_i_chart
+from project1_main_tab.Plotly_modules.plotly_rolling_band import plotly_rolling_band
+from project1_main_tab.Plotly_modules.plotly_mw_binned_scatter import plotly_mw_binned_scatter
+
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QMenu
 from PySide6.QtCore import Qt
@@ -134,8 +137,7 @@ class PlotlySpecCell(QWidget):
                 fig = plotly_boxplot(df2, selected_vars)
             elif chart_type == "Violin":
                 fig = plotly_violin(df2, selected_vars)
-            elif chart_type == "Boxen":
-                fig = plotly_boxen(df2, selected_vars)
+
             elif chart_type == "Histogram + Boxplot":
                 fig = plotly_hist_box(df2, selected_vars)
             elif chart_type == "Heatmap Correlation":
@@ -149,13 +151,47 @@ class PlotlySpecCell(QWidget):
                     fig = plotly_pairplot(df2, selected_vars)
             elif chart_type == "Pie":
                 fig = plotly_pie(df2, selected_vars)
-            elif chart_type == "Treemap":
-                fig = plotly_treemap(df2, selected_vars)
-            elif chart_type == "Sunburst":
-                fig = plotly_sunburst(df2, selected_vars)
+
             elif chart_type == "Parallel Coordinates":
                 if len(selected_vars) >= 2:
                     fig = plotly_parcoords(df2, selected_vars)
+                        # ===== SPC Control Chart =====
+            elif chart_type == "SPC Control (I-Chart)":
+                if "Datetime" in df2.columns and selected_vars:
+                    window = 60  # có thể đọc từ spec nếu muốn
+                    fig = plotly_spc_i_chart(
+                        df=df2,
+                        x_col="Datetime",
+                        y_col=selected_vars[0],
+                        window=window,
+                        sigma=3.0
+                    )
+
+            # ===== Rolling Band =====
+            elif chart_type == "Rolling Band":
+                if "Datetime" in df2.columns and selected_vars:
+                    window = 60
+                    fig = plotly_rolling_band(
+                        df=df2,
+                        x_col="Datetime",
+                        y_col=selected_vars[0],
+                        window=window,
+                        band_sigma=1.0
+                    )
+
+            # ===== MW-binned Scatter =====
+            elif chart_type == "MW-binned Scatter":
+                if "Datetime" in df2.columns and selected_vars:
+                    if "NET MW" in df2.columns:
+                        fig = plotly_mw_binned_scatter(
+                            df=df2,
+                            x_col="Datetime",
+                            y_col=selected_vars[0],
+                            mw_col="NET MW",
+                            bin_size=50.0,
+                            max_bins=8
+                        )
+
         except Exception:
             fig = None
 
