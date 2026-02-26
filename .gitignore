@@ -42,3 +42,55 @@ Thumbs.db
 output/
 test/
 temp/
+# =============== EXE PACKAGING (PyInstaller / Nuitka) ===============
+
+# PyInstaller build cache
+build/
+dist/
+*.spec
+*.manifest
+
+# Nuitka
+*.build/
+*.dist/
+*.onefile-build/
+*.bin
+
+# Qt / WebEngine runtime cache
+qtwebengine_devtools_resources.pak
+qtwebengine_resources.pak
+qtwebengine_resources_*.pak
+icudtl.dat
+resources.pak
+*.pak
+
+# Python runtime generated
+*.dll
+*.so
+*.dylib
+
+# Packaging temp
+*.toc
+*.pkg
+*.dat
+*.zip
+
+# Embedded Python / venv inside exe folder
+python_embed/
+runtime/
+libs/
+
+# Large assets thường bị dính khi build
+*.onnx
+*.pt
+*.pth
+*.faiss
+*.index
+
+# Kaleido / plotly static export
+kaleido/
+*.svg
+*.png
+*.jpg
+Monitoring storage/
+*.html

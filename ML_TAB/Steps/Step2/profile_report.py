@@ -22,21 +22,6 @@ def generate_profile_json(
     json_path = str(out / json_name)
     html_path = str(out / html_name) if html else None
 
-    profile = ProfileReport(
-        df,
-        title=title,
-        minimal=minimal,
-        explorative=True,
-        correlations={"pearson": {"calculate": True},
-                      "spearman": {"calculate": True}}
-    )
-
-    # Xuất JSON (để lưu trữ/so sánh)
-    # with open(json_path, "w", encoding="utf-8") as f:
-    #     f.write(profile.to_json())
-
-    # # Xuất HTML đầy đủ (UI giống hệt web)
-    if html:
-        profile.to_file(html_path)
+    
 
     return json_path, html_path

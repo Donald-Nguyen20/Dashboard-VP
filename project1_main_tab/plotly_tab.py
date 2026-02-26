@@ -26,6 +26,7 @@ from project1_main_tab.Plotly_modules.plotly_spc_control_chart import plotly_spc
 from project1_main_tab.Plotly_modules.plotly_rolling_band import plotly_rolling_band
 from project1_main_tab.Plotly_modules.plotly_mw_binned_scatter import plotly_mw_binned_scatter
 from project1_main_tab.plot_tab import MultiRangeDialog
+from project1_main_tab.plot_tab import MultiRangeDialog, SimpleScaleDialog
 IGNORED_COLUMNS = {'datetime', 'date', 'time', 'sourcefolder'}
 
 
@@ -90,6 +91,7 @@ class PlotlyTab(QWidget):
         super().__init__(parent)
         self.df = pd.DataFrame()
         self.selected_vars = []
+        self.scales: dict[str, float] = {}
         self._last_fig = None
         self._last_html_path = None  # Đường dẫn HTML đồ thị cuối → Monitoring nhúng nguyên đồ thị (không dùng kaleido)
 
@@ -129,13 +131,16 @@ class PlotlyTab(QWidget):
         for dt in [self.start_time, self.end_time]:
             dt.setDisplayFormat("yyyy-MM-dd HH:mm")
             dt.setCalendarPopup(True)
-
+        self.btn_scale = QPushButton("⚖️ Scale")
+        self.btn_scale.setToolTip("Scale từng biến (y = y * scale), giống Plot tab")
+        self.btn_scale.clicked.connect(self.open_scale_dialog)
         btn_plot = QPushButton("📊 Vẽ")
         btn_plot.clicked.connect(self.draw_chart)
 
         topbar.addWidget(QLabel("Biểu đồ:"))
         topbar.addWidget(self.chart_type_combo)
         topbar.addWidget(self.btn_variable)
+        topbar.addWidget(self.btn_scale)
         topbar.addWidget(QLabel("Range:"))
         topbar.addWidget(self.range_spin)
         topbar.addWidget(QLabel("⏱ From:"))
@@ -236,7 +241,10 @@ class PlotlyTab(QWidget):
             return
 
         elif chart_type == "Line":
-            x = "Datetime" if "Datetime" in df_filtered.columns else (self.selected_vars[0] if self.selected_vars else "x")
+            x = "Datetime" if "Datetime" in df_filtered.columns else (
+                self.selected_vars[0] if self.selected_vars else "x"
+            )
+
             time_ranges = None
             if self.range_spin.value() > 1 and "Datetime" in self.df.columns:
                 dlg = MultiRangeDialog(self.range_spin.value(), df=self.df, parent=self)
@@ -244,9 +252,15 @@ class PlotlyTab(QWidget):
                     time_ranges = dlg.get_ranges()
                 else:
                     return
-            fig = plotly_line_chart(self.df, x, self.selected_vars, time_ranges=time_ranges)
-            if fig is None:
-                fig = plotly_line_chart(df_filtered, x, self.selected_vars)
+
+            # luôn vẽ từ df gốc (để scale + multi-range chính xác)
+            fig = plotly_line_chart(
+                self.df,
+                x,
+                self.selected_vars,
+                time_ranges=time_ranges,
+                scales=self.scales,   # ← dòng quan trọng nhất
+            )
 
             self._last_fig = fig
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
@@ -438,3 +452,11 @@ class PlotlyTab(QWidget):
             "selected_vars": list(self.selected_vars),
             "range_spin": int(self.range_spin.value()),
         }
+    def open_scale_dialog(self):
+        if not self.selected_vars:
+            QMessageBox.warning(self, "Thiếu biến", "Chọn biến trước rồi hãy scale.")
+            return
+        dlg = SimpleScaleDialog(self.selected_vars, self.scales, self)
+        if dlg.exec():
+            self.scales = dlg.get_scales()
+            self.draw_chart()
