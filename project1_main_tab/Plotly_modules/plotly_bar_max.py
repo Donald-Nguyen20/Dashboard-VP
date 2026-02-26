@@ -2,98 +2,174 @@ import pandas as pd
 import plotly.graph_objs as go
 
 
-def _get_range_colors(n):
-    palette = ["#1976d2", "#d32f2f", "#388e3c", "#f57c00", "#7b1fa2", "#00796b", "#5d4037", "#455a64", "#c2185b", "#0097a7"]
-    return [palette[i % len(palette)] for i in range(n)]
+def plotly_bar_max(
+    df: pd.DataFrame,
+    y_columns,
+    title="Min/Max (stacked) by tag",
+    time_ranges=None,
+    min_color="#5245CA",
+    max_color="#26A69A",
+    label_size=16,
+    show_min_label=True,    # ✅ bật hiển thị MIN
+    show_max_label=True,    # ✅ hiển thị MAX
+):
+    """
+    1 tag = 1 thanh duy nhất (stack):
+      - phần dưới: MIN (màu min_color)
+      - phần trên: (MAX - MIN) (màu max_color)
 
+    Multi-range:
+      - group theo từng time range (đứng cạnh nhau)
+      - trong mỗi group vẫn stack (min + delta)
+      - label MIN nằm trong phần xanh (inside)
+      - label MAX nằm trên đỉnh thanh (outside)
+      - label không bị chồng giữa các ranges nhờ offsetgroup
+    """
 
-def plotly_bar_max(df: pd.DataFrame, y_columns, title="Max value by tag", time_ranges=None):
+    def _minmax(dfx: pd.DataFrame, cols):
+        out = {}
+        for col in cols:
+            if col not in dfx.columns:
+                continue
+            s = pd.to_numeric(dfx[col], errors="coerce")
+            mn = s.min(skipna=True)
+            mx = s.max(skipna=True)
+            if pd.notna(mn) and pd.notna(mx):
+                out[col] = (float(mn), float(mx))
+        return out
+
+    # ================= MULTI-RANGE =================
     if time_ranges is not None and len(time_ranges) > 1 and "Datetime" in df.columns:
         range_data = []
         for start_dt, end_dt in time_ranges:
-            df_range = df[(df["Datetime"] >= start_dt) & (df["Datetime"] <= end_dt)]
-            if df_range.empty:
+            dfr = df[(df["Datetime"] >= start_dt) & (df["Datetime"] <= end_dt)]
+            if dfr.empty:
                 continue
-            maxs = {}
-            for col in y_columns:
-                if col not in df_range.columns:
-                    continue
-                s = pd.to_numeric(df_range[col], errors="coerce")
-                mx = s.max(skipna=True)
-                if pd.notna(mx):
-                    maxs[col] = float(mx)
-            range_data.append({"maxs": maxs, "label": f"{start_dt.strftime('%Y-%m-%d')} to {end_dt.strftime('%Y-%m-%d')}"})
+            mm = _minmax(dfr, y_columns)
+            if mm:
+                range_data.append(
+                    (f"{start_dt.strftime('%Y-%m-%d')}→{end_dt.strftime('%Y-%m-%d')}", mm)
+                )
+
         if not range_data:
-            return plotly_bar_max(df, y_columns, title=title)
-        vars_used = list(range_data[0]["maxs"].keys())
-        if not vars_used:
-            return plotly_bar_max(df, y_columns, title=title)
+            return plotly_bar_max(
+                df, y_columns, title=title, time_ranges=None,
+                min_color=min_color, max_color=max_color, label_size=label_size,
+                show_min_label=show_min_label, show_max_label=show_max_label
+            )
+
+        tags = list(range_data[0][1].keys())
+        if not tags:
+            return plotly_bar_max(
+                df, y_columns, title=title, time_ranges=None,
+                min_color=min_color, max_color=max_color, label_size=label_size,
+                show_min_label=show_min_label, show_max_label=show_max_label
+            )
+
         fig = go.Figure()
-        colors = _get_range_colors(len(range_data))
-        for r_idx, r_info in enumerate(range_data):
-            y_vals = [r_info["maxs"].get(v, 0) for v in vars_used]
+
+        for idx, (label, mm) in enumerate(range_data):
+            mins = [mm.get(t, (0.0, 0.0))[0] for t in tags]
+            maxs = [mm.get(t, (0.0, 0.0))[1] for t in tags]
+            deltas = [max(mx - mn, 0.0) for mn, mx in zip(mins, maxs)]
+
+            # MIN (stack base) + label inside
             fig.add_trace(go.Bar(
-                name=r_info["label"],
-                x=vars_used,
-                y=y_vals,
-                text=[f"{v:.2f}" for v in y_vals],
-                textposition="outside",
-                marker_color=colors[r_idx],
-                hovertemplate="<b>%{x}</b><br>%{fullData.name}<br>max=%{y}<extra></extra>",
+                x=tags,
+                y=mins,
+                name=f"{label} | Min",
+                marker_color=min_color,
+                offsetgroup=str(idx),
+                legendgroup=str(idx),
+                text=[f"{v:.3g}" for v in mins] if show_min_label else None,
+                textposition="inside" if show_min_label else None,
+                textfont=dict(size=label_size, color="white") if show_min_label else None,
+                cliponaxis=False,
+                hovertemplate="<b>%{x}</b><br>Range: " + label + "<br>Min=%{y}<extra></extra>",
             ))
+
+            # MAX (delta on top) + label outside at top = max real
+            fig.add_trace(go.Bar(
+                x=tags,
+                y=deltas,
+                name=f"{label} | Max",
+                marker_color=max_color,
+                offsetgroup=str(idx),
+                legendgroup=str(idx),
+                customdata=maxs,
+                text=[f"{v:.3g}" for v in maxs] if show_max_label else None,
+                textposition="outside" if show_max_label else None,
+                textfont=dict(size=label_size, color="#111111") if show_max_label else None,
+                cliponaxis=False,
+                hovertemplate="<b>%{x}</b><br>Range: " + label + "<br>Max=%{customdata}<br>(Max-Min)=%{y}<extra></extra>",
+            ))
+
         fig.update_layout(
-            title=f"Bar Comparison - {len(range_data)} Ranges",
-            xaxis_title="Variable",
-            yaxis_title="Max value",
+            title=f"{title} - {len(range_data)} ranges",
+            xaxis_title="Tag / Variable",
+            yaxis_title="Value",
             template="plotly_white",
-            barmode="group",
-            margin=dict(l=40, r=20, t=50, b=80),
+            barmode="stack",
+            bargap=0.25,
+            margin=dict(l=40, r=20, t=70, b=90),
+            uniformtext=dict(minsize=max(12, label_size - 2), mode="show"),
         )
         fig.update_xaxes(tickangle=-35)
         return fig
 
-    rows = []
-
-    for col in y_columns:
-        if col not in df.columns:
-            continue
-        s = pd.to_numeric(df[col], errors="coerce")
-        mx = s.max(skipna=True)
-        if pd.isna(mx):
-            continue
-        rows.append((col, float(mx)))
-
-    if not rows:
+    # ================= SINGLE RANGE =================
+    mm = _minmax(df, y_columns)
+    if not mm:
         fig = go.Figure()
-        fig.update_layout(
-            title="No numeric max values to plot",
-            template="plotly_white"
-        )
+        fig.update_layout(title="No numeric min/max values to plot", template="plotly_white")
         return fig
 
-    rows.sort(key=lambda x: x[1], reverse=True)
+    tags = list(mm.keys())
+    mins = [mm[t][0] for t in tags]
+    maxs = [mm[t][1] for t in tags]
+    deltas = [max(mx - mn, 0.0) for mn, mx in zip(mins, maxs)]
 
-    x = [r[0] for r in rows]
-    y = [r[1] for r in rows]
+    order = sorted(range(len(tags)), key=lambda i: maxs[i], reverse=True)
+    tags = [tags[i] for i in order]
+    mins = [mins[i] for i in order]
+    maxs = [maxs[i] for i in order]
+    deltas = [deltas[i] for i in order]
 
     fig = go.Figure()
 
     fig.add_trace(go.Bar(
-        x=x,
-        y=y,
-        text=[f"{v:.3g}" for v in y],
-        textposition="outside",
-        hovertemplate="<b>%{x}</b><br>max=%{y}<extra></extra>"
+        x=tags,
+        y=mins,
+        name="Min",
+        marker_color=min_color,
+        text=[f"{v:.3g}" for v in mins] if show_min_label else None,
+        textposition="inside" if show_min_label else None,
+        textfont=dict(size=label_size, color="white") if show_min_label else None,
+        cliponaxis=False,
+        hovertemplate="<b>%{x}</b><br>Min=%{y}<extra></extra>",
+    ))
+
+    fig.add_trace(go.Bar(
+        x=tags,
+        y=deltas,
+        name="Max",
+        marker_color=max_color,
+        customdata=maxs,
+        text=[f"{v:.3g}" for v in maxs] if show_max_label else None,
+        textposition="outside" if show_max_label else None,
+        textfont=dict(size=label_size, color="#111111") if show_max_label else None,
+        cliponaxis=False,
+        hovertemplate="<b>%{x}</b><br>Max=%{customdata}<br>(Max-Min)=%{y}<extra></extra>",
     ))
 
     fig.update_layout(
         title=title,
         xaxis_title="Tag / Variable",
-        yaxis_title="Max value",
+        yaxis_title="Value",
         template="plotly_white",
-        margin=dict(l=40, r=20, t=50, b=60),
+        barmode="stack",
+        margin=dict(l=40, r=20, t=70, b=90),
+        uniformtext=dict(minsize=max(12, label_size - 2), mode="show"),
     )
-
     fig.update_xaxes(tickangle=-35)
-
     return fig
