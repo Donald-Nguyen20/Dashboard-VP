@@ -70,5 +70,7 @@ def plotly_mw_binned_scatter(
         yaxis_title=y_col,
         legend=dict(orientation="h"),
         margin=dict(l=40, r=20, t=60, b=40),
+        # paper_bgcolor="white",   # nền toàn bộ figure
+        # plot_bgcolor="white",    # nền vùng vẽ bên trong trục
     )
     return fig

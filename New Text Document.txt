@@ -20,3 +20,19 @@ cập nhật predict theo khoảng thời gian
 cập nhật màu sắc theo win 11 + chức năng analysis report
 phân loại 2 mốc tải và tháng 
 tạo thư viện mới plotly
+pyinstaller --onefile .\master_window.py --icon=DFA.ico --noconfirm --clean --console `
+  --add-data "ML_TAB\assets;ML_TAB\assets" `
+  --exclude-module tkinter --exclude-module _tkinter `
+  --exclude-module PyQt5 --exclude-module PyQt6 `
+  --exclude-module numba --exclude-module llvmlite `
+  --exclude-module torch --exclude-module torchvision --exclude-module torchaudio `
+  --exclude-module tensorflow --exclude-module keras --exclude-module jax `
+  --exclude-module spacy --exclude-module thinc --exclude-module langcodes `
+  --exclude-module nltk --exclude-module transformers `
+  --exclude-module librosa --exclude-module soundfile `
+  --exclude-module pyarrow --exclude-module fsspec `
+  --exclude-module OpenGL --exclude-module pygame --exclude-module cv2 `
+  --exclude-module IPython --exclude-module notebook --exclude-module nbformat --exclude-module nbconvert --exclude-module jupyterlab `
+  --exclude-module faiss --exclude-module faiss_cpu --exclude-module rapidfuzz `
+  --exclude-module pytest `
+  --exclude-module sympy

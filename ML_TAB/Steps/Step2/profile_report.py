@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional, Tuple
 import pandas as pd
-from ydata_profiling import ProfileReport
+
 
 
 def generate_profile_json(

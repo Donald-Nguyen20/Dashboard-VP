@@ -68,20 +68,14 @@
               }
             },
             {
-              "cell_id": "dfd82b24",
+              "cell_id": "4486aa5d",
               "row": 2,
               "col": 0,
               "type": "plotly_spec",
               "plotly_spec": {
-                "chart_type": "Treemap",
+                "chart_type": "MW-binned Scatter",
                 "selected_vars": [
-                  "NET MW",
-                  "ECO O/L FG TEMP",
-                  "AH O/L FG TEMP",
-                  "AH I/L PA TEMP",
-                  "AH O/L PA TEMP",
-                  "AH I/L SECAIR TEMP",
-                  "AH O/L SECAIR TEMP"
+                  "DP_AH"
                 ],
                 "range_spin": 1
               }

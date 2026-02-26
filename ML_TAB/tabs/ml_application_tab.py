@@ -12,7 +12,7 @@ import pandas as pd
 from ML_TAB.widgets.step_card import StepCard
 from ML_TAB.Steps.Step7.Load_and_Deployment import predict_from_model
 from ML_TAB.Steps.Step1.data_collection import load_rawdata
-from ML_TAB.Steps.Step2.profile_report import generate_profile_json
+# from ML_TAB.Steps.Step2.profile_report import generate_profile_json
 from PySide6.QtWidgets import QLabel, QDoubleSpinBox, QPushButton
 from ML_TAB.Steps.Step3.outlier_tools import (
     detect_outliers_iqr,
@@ -20,9 +20,6 @@ from ML_TAB.Steps.Step3.outlier_tools import (
     detect_outliers_modified_zscore,
     detect_outliers_isoforest,
     detect_outliers_lof,
-    detect_outliers_ecod,
-    detect_outliers_copod,
-    detect_outliers_knn,
     combine_outlier_results,
 )
 from ML_TAB.Steps.Step4.line_visualization_dialog import DataLinePlotDialog
@@ -242,22 +239,51 @@ class MLApplicationTab(QWidget):
             return
 
 
-        # --- STEP 2: Statistics / Profiling (HTML full fidelity) ---
+        # # --- STEP 2: Statistics / Profiling (HTML full fidelity) ---
+        # if step_no == 2:
+        #     if getattr(self, "Rawdata", None) is None:
+        #         QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy chạy Step 1 để nạp Rawdata trước.")
+        #         return
+        #     try:
+        #         json_path, html_path = generate_profile_json(
+        #             self.Rawdata,
+        #             out_dir="reports",
+        #             html=True,
+        #             minimal=True
+        #         )
+        #     except Exception as e:
+        #         QMessageBox.critical(self, "Lỗi Step 2", str(e))
+        #     return
+        # --- STEP 4: Data visualization (Line) ---
+        # --- STEP 2: Statistics (lightweight, no ydata_profiling) ---
         if step_no == 2:
             if getattr(self, "Rawdata", None) is None:
                 QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy chạy Step 1 để nạp Rawdata trước.")
                 return
-            try:
-                json_path, html_path = generate_profile_json(
-                    self.Rawdata,
-                    out_dir="reports",
-                    html=True,
-                    minimal=True
-                )
-            except Exception as e:
-                QMessageBox.critical(self, "Lỗi Step 2", str(e))
+
+            df = self.Rawdata.copy()
+
+            # thống kê nhanh cho vận hành viên (nhẹ, không cần lib ngoài)
+            rows, cols = df.shape
+            miss_pct = (df.isna().sum() / max(rows, 1) * 100).sort_values(ascending=False)
+            miss_top = miss_pct[miss_pct > 0].head(10)
+
+            num_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+            summary = df[num_cols].describe().T if num_cols else pd.DataFrame()
+
+            msg = [
+                f"Shape: {rows} rows x {cols} cols",
+                f"Numeric cols: {len(num_cols)}",
+                "",
+                "Missing top (<=10):",
+                miss_top.to_string() if not miss_top.empty else "(No missing values)",
+                "",
+                "Describe (numeric):",
+                summary.head(10).to_string() if not summary.empty else "(No numeric columns)",
+            ]
+
+            QMessageBox.information(self, "Statistics (Step 2)", "\n".join(msg))
             return
-        # --- STEP 4: Data visualization (Line) ---
         if step_no == 4:
             self._show_line_visualization()
             return
@@ -322,9 +348,7 @@ class MLApplicationTab(QWidget):
             iso_df   = detect_outliers_isoforest(df, contamination=0.05)
             lof_df   = detect_outliers_lof(df, n_neighbors=20, contamination=0.05)
 
-            ecod_df  = detect_outliers_ecod(df, contamination=0.05)
-            copod_df = detect_outliers_copod(df, contamination=0.05)
-            knn_df   = detect_outliers_knn(df, n_neighbors=20, contamination=0.05)
+
 
             df_inter = combine_outlier_results(iqr_df, zs_df, how="intersection")
             if df_inter is not None and not df_inter.empty:
@@ -339,9 +363,7 @@ class MLApplicationTab(QWidget):
             dlg.add_tab("Modified Z-score", modz_df)
             dlg.add_tab("IsolationForest", iso_df)
             dlg.add_tab("LOF", lof_df)
-            dlg.add_tab("ECOD", ecod_df)
-            dlg.add_tab("COPOD", copod_df)
-            dlg.add_tab("KNN", knn_df)
+
 
             result = dlg.exec()
 
