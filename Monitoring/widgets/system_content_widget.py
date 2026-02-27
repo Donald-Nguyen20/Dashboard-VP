@@ -160,7 +160,7 @@ class SystemContentWidget(QWidget):
         rangebar = QHBoxLayout()
         rangebar.addWidget(QLabel("⏱ From:"))
 
-        self.dt_start = QDateTimeEdit(QDateTime.currentDateTime().addSecs(-3600))
+        self.dt_start = QDateTimeEdit(QDateTime.currentDateTime().addSecs(-15552000))  # mặc định 180 ngày trước
         self.dt_start.setDisplayFormat("yyyy-MM-dd HH:mm")
         self.dt_start.setCalendarPopup(True)
         rangebar.addWidget(self.dt_start)
