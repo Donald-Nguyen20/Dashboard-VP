@@ -29,6 +29,7 @@ from Monitoring.widgets.plotly_embed_cell import PlotlyEmbedCell
 from PySide6.QtWidgets import QFileDialog
 from Monitoring.reporting.export_report_dialog import ExportReportDialog
 from Monitoring.reporting.report_exporter import export_report_docx, export_report_pdf, PdfLayoutConfig
+from Monitoring.widgets.operating_report_panel import OperatingReportPanel
 from reportlab.lib.units import mm
 import os, tempfile
 from PySide6.QtGui import QPixmap
@@ -118,7 +119,7 @@ class SystemContentWidget(QWidget):
 
         # Toolbar
         toolbar = QHBoxLayout()
-        toolbar.addWidget(QLabel("Bố cục:"))
+
 
         self.btn_add_row = QPushButton("➕ Thêm hàng")
         self.btn_add_row.setStyleSheet("QPushButton { padding: 6px 12px; }")
@@ -187,9 +188,22 @@ class SystemContentWidget(QWidget):
         self.grid_container = QWidget()
         self.grid_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        self.rows_layout = QVBoxLayout(self.grid_container)
+        self.scroll_root_layout = QVBoxLayout(self.grid_container)
+        self.scroll_root_layout.setSpacing(12)
+        self.scroll_root_layout.setContentsMargins(8, 8, 8, 8)
+
+        # layout chứa rows (phần này sẽ bị clear/rebuild)
+        self.rows_holder = QWidget(self.grid_container)
+        self.rows_layout = QVBoxLayout(self.rows_holder)
         self.rows_layout.setSpacing(12)
-        self.rows_layout.setContentsMargins(8, 8, 8, 8)
+        self.rows_layout.setContentsMargins(0, 0, 0, 0)
+
+        # add rows holder vào root layout
+        self.scroll_root_layout.addWidget(self.rows_holder)
+
+        # report panel đặt dưới cùng và KHÔNG bị clear
+        self.report_panel = OperatingReportPanel(self.grid_container)
+        self.scroll_root_layout.addWidget(self.report_panel)
 
         scroll.setWidget(self.grid_container)
         main_layout.addWidget(scroll, 1)
@@ -648,7 +662,72 @@ class SystemContentWidget(QWidget):
 
         QMessageBox.information(self, "Export Report", f"Đã xuất báo cáo:\n{save_path}")
     def _on_apply_time_range(self) -> None:
-        # rerender tất cả cell plotly_spec
+        # 1) rerender tất cả cell plotly_spec
         for w in self.cell_widgets.values():
             if isinstance(w, PlotlySpecCell):
                 w.rerender()
+
+        # 2) lấy df gốc
+        df = self.df_provider() if self.df_provider else None
+        if df is None or df.empty:
+            if hasattr(self, "report_panel") and self.report_panel:
+                self.report_panel.clear()
+            return
+
+        # 3) detect time column
+        time_col = None
+        for cand in ("Datetime", "datetime", "DATE_TIME", "Time", "time", "timestamp", "Timestamp"):
+            if cand in df.columns:
+                time_col = cand
+                break
+
+        # 4) filter df_range theo time range (dt_start/dt_end)
+        if time_col is None:
+            # fallback: assume index is time (không filter được chắc chắn)
+            df_range = df.copy()
+        else:
+            d = df.copy()
+            d[time_col] = pd.to_datetime(d[time_col], errors="coerce")
+            d = d.dropna(subset=[time_col]).sort_values(time_col)
+
+            start = self.dt_start.dateTime().toPython()
+            end = self.dt_end.dateTime().toPython()
+            df_range = d[(d[time_col] >= start) & (d[time_col] <= end)]
+
+        if df_range is None or df_range.empty:
+            if hasattr(self, "report_panel") and self.report_panel:
+                self.report_panel.clear()
+            return
+
+        # 5) chọn MW column (nếu có)
+        mw_col = None
+        for cand in ("NET MW", "MW", "NetMW", "Unit Load", "Load"):
+            if cand in df_range.columns:
+                mw_col = cand
+                break
+
+        # 6) chọn danh sách tags để đưa vào báo cáo:
+        #    - ưu tiên: các cột numeric
+        #    - bỏ qua time_col và MW
+        ignore = set()
+        if time_col:
+            ignore.add(time_col)
+        if mw_col:
+            ignore.add(mw_col)
+
+        tags = []
+        for c in df_range.columns:
+            if c in ignore:
+                continue
+            s = pd.to_numeric(df_range[c], errors="coerce")
+            if s.notna().sum() >= 20:  # report nên yêu cầu nhiều điểm hơn chút
+                tags.append(c)
+
+        # 7) update report panel (narrative)
+        if hasattr(self, "report_panel") and self.report_panel:
+            self.report_panel.update_report(
+                df_range=df_range,
+                tags=tags,
+                time_col=time_col,
+                mw_col=mw_col,
+            )
