@@ -4,8 +4,8 @@ import pandas as pd
 
 from .shock_detector import detect_shocks
 from .oscillation_detector import detect_oscillation_when_mw_stable
-from .trend_detector import detect_trend_extremes, detect_trend_max_min_6m
-
+# from .trend_detector import detect_trend_extremes, detect_trend_max_min_6m
+from .local_trend_detector import detect_recent_trend_longest_months
 def _infer_time_col(df: pd.DataFrame) -> Optional[str]:
     for cand in ("Datetime", "datetime", "DATE_TIME", "Time", "time", "timestamp", "Timestamp"):
         if cand in df.columns:
@@ -85,28 +85,49 @@ def build_operating_report(
                     f"• <b>{ev.tag}</b> <b>dao động lớn</b> ({ev.flips} lần đổi chiều) trong <b>{ev.start} → {ev.end}</b>."
                 )
 
-        # 3) Trend
-        if span_desc == "6 tháng":
-            for tr in detect_trend_max_min_6m(s, tag=tag, span_desc="6 tháng"):
-                if tr.kind == "MAX_UP":
-                    trend_lines.append(
-                        f"• <b>{tr.tag}</b>: <b>giá trị max tăng dần</b> trong <b>{tr.span_desc}</b> (mức độ≈{tr.slope_ratio:.2f})."
-                    )
-                elif tr.kind == "MIN_DOWN":
-                    trend_lines.append(
-                        f"• <b>{tr.tag}</b>: <b>giá trị min giảm dần</b> trong <b>{tr.span_desc}</b> (mức độ≈{tr.slope_ratio:.2f})."
-                    )
-        else:
-            for tr in detect_trend_extremes(s, tag=tag, span_desc=span_desc, resample_rule="1D"):
-                if tr.kind == "UP":
-                    trend_lines.append(
-                        f"• <b>{tr.tag}</b>: có <b>xu hướng tăng</b> ({tr.span_desc}, mức độ≈{tr.slope_ratio:.2f})."
-                    )
-                elif tr.kind == "DOWN":
-                    trend_lines.append(
-                        f"• <b>{tr.tag}</b>: có <b>xu hướng giảm</b> ({tr.span_desc}, mức độ≈{tr.slope_ratio:.2f})."
-                    )
-
+        # # 3) Trend
+        # if span_desc == "6 tháng":
+        #     for tr in detect_trend_max_min_6m(s, tag=tag, span_desc="6 tháng"):
+        #         if tr.kind == "MAX_UP":
+        #             trend_lines.append(
+        #                 f"• <b>{tr.tag}</b>: <b>giá trị max tăng dần</b> trong <b>{tr.span_desc}</b> (mức độ≈{tr.slope_ratio:.2f})."
+        #             )
+        #         elif tr.kind == "MIN_DOWN":
+        #             trend_lines.append(
+        #                 f"• <b>{tr.tag}</b>: <b>giá trị min giảm dần</b> trong <b>{tr.span_desc}</b> (mức độ≈{tr.slope_ratio:.2f})."
+        #             )
+        # else:
+        #     for tr in detect_trend_extremes(s, tag=tag, span_desc=span_desc, resample_rule="1D"):
+        #         if tr.kind == "UP":
+        #             trend_lines.append(
+        #                 f"• <b>{tr.tag}</b>: có <b>xu hướng tăng</b> ({tr.span_desc}, mức độ≈{tr.slope_ratio:.2f})."
+        #             )
+        #         elif tr.kind == "DOWN":
+        #             trend_lines.append(
+        #                 f"• <b>{tr.tag}</b>: có <b>xu hướng giảm</b> ({tr.span_desc}, mức độ≈{tr.slope_ratio:.2f})."
+        #             )
+         # 3b) Recent trend >= 3 months (báo theo số tháng LỚN NHẤT)
+        hit = detect_recent_trend_longest_months(
+            s, tag=tag,
+            min_months=3,
+            max_months=12,          # anh muốn quét tối đa bao nhiêu tháng thì chỉnh đây
+            slope_ratio_thr=0.18    # ngưỡng báo
+        )
+        if hit:
+            if hit.direction == "DOWN":
+                trend_lines.append(
+                    f"• <b>{tag}</b>: "
+                    f"<span style='color:#d32f2f; font-weight:700;'>xu hướng giảm</span> "
+                    f"trong <b>{hit.months} tháng gần nhất</b> "
+                    f"(<b>{hit.start:%Y-%m-%d} → {hit.end:%Y-%m-%d}</b>, mức độ≈{hit.strength:.2f})."
+                )
+            else:
+                trend_lines.append(
+                    f"• <b>{tag}</b>: "
+                    f"<span style='color:#2e7d32; font-weight:700;'>xu hướng tăng</span> "
+                    f"trong <b>{hit.months} tháng gần nhất</b> "
+                    f"(<b>{hit.start:%Y-%m-%d} → {hit.end:%Y-%m-%d}</b>, mức độ≈{hit.strength:.2f})."
+                )
     # Compose
     if shock_lines:
         lines.append("<b>1) Shock / Spike</b><br>" + "<br>".join(shock_lines) + "<br><br>")

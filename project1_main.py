@@ -212,43 +212,64 @@ QPushButton:pressed {
         self.load_folders(filter_text=text)
 
     def load_folders(self, filter_text=""):
-        # Xóa các widget cũ (trừ ô tìm kiếm)
+        # Xóa các widget cũ (trừ ô tìm kiếm + nút Load Data + date_row)
         for i in reversed(range(3, self.scroll_layout.count())):
-
-            widget = self.scroll_layout.itemAt(i).widget()
-            if widget:
-                widget.setParent(None)
+            item = self.scroll_layout.itemAt(i)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
             else:
-                item = self.scroll_layout.itemAt(i)
                 self.scroll_layout.removeItem(item)
+
+        INTERNAL_FOLDERS = {
+            "Monitoring storage",
+            "formulas",
+            "__pycache__",
+            ".git",
+            ".idea",
+            ".vscode",
+        }
 
         base_path = app_dir()
         matched_count = 0
+        ft = (filter_text or "").lower().strip()
+
         for folder in sorted(base_path.iterdir()):
-            if folder.is_dir() and not folder.name.startswith('.'):
-                if filter_text.lower() not in folder.name.lower():
-                    continue
-                btn = QPushButton(f"{folder.name}")
-                btn.setCursor(Qt.PointingHandCursor)
-                btn.setStyleSheet("""
-    QPushButton {
-        text-align: left;
-        padding-left: 12px;
-        background-color: transparent;
-        color: #000000;
-        font-weight: bold;
-        border: none;
-        border-radius: 5px;
-        margin-bottom: 4px;
-    }
-    QPushButton:hover {
-        background-color: #cce5ff;
-        color: #004a99;
-    }
-    """)
-                btn.clicked.connect(lambda _, name=folder.name: self.open_folder(name))
-                self.scroll_layout.addWidget(btn)
-                matched_count += 1
+            if not folder.is_dir():
+                continue
+
+            name = folder.name
+
+            # 1) bỏ qua folder nội bộ + folder bắt đầu bằng "."
+            if name.startswith(".") or name in INTERNAL_FOLDERS:
+                continue
+
+            # 2) filter search
+            if ft and ft not in name.lower():
+                continue
+
+            btn = QPushButton(name)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    text-align: left;
+                    padding-left: 12px;
+                    background-color: transparent;
+                    color: #000000;
+                    font-weight: bold;
+                    border: none;
+                    border-radius: 5px;
+                    margin-bottom: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #cce5ff;
+                    color: #004a99;
+                }
+            """)
+            btn.clicked.connect(lambda _, n=name: self.open_folder(n))
+            self.scroll_layout.addWidget(btn)
+            matched_count += 1
+
         if matched_count > 0:
             self.scroll_layout.addStretch()
 
