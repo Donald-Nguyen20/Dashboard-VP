@@ -121,22 +121,22 @@ class SystemContentWidget(QWidget):
         toolbar = QHBoxLayout()
 
 
-        self.btn_add_row = QPushButton("➕ Thêm hàng")
+        self.btn_add_row = QPushButton("➕ Add Row")
         self.btn_add_row.setStyleSheet("QPushButton { padding: 6px 12px; }")
         self.btn_add_row.clicked.connect(self._on_add_row)
         toolbar.addWidget(self.btn_add_row)
 
-        self.btn_add_col = QPushButton("➕ Thêm cột (hàng đang chọn)")
+        self.btn_add_col = QPushButton("➕ Add Column")
         self.btn_add_col.setStyleSheet("QPushButton { padding: 6px 12px; }")
         self.btn_add_col.clicked.connect(self._on_add_col)
         toolbar.addWidget(self.btn_add_col)
 
-        self.btn_remove_col = QPushButton("➖ Bớt cột (hàng đang chọn)")
+        self.btn_remove_col = QPushButton("➖ Remove Column")
         self.btn_remove_col.setStyleSheet("QPushButton { padding: 6px 12px; }")
         self.btn_remove_col.clicked.connect(self._on_remove_col)
         toolbar.addWidget(self.btn_remove_col)
 
-        self.btn_remove_row = QPushButton("🗑️ Xóa hàng (hàng đang chọn)")
+        self.btn_remove_row = QPushButton("🗑️ Remove Row")
         self.btn_remove_row.setStyleSheet("QPushButton { padding: 6px 12px; }")
         self.btn_remove_row.clicked.connect(self._on_remove_row)
         toolbar.addWidget(self.btn_remove_row)
@@ -701,7 +701,7 @@ class SystemContentWidget(QWidget):
 
         # 5) chọn MW column (nếu có)
         mw_col = None
-        for cand in ("NET MW", "MW", "NetMW", "Unit Load", "Load"):
+        for cand in ("NET MW", "GEN PWR (GEN SID)", "MWD4", "Unit Load", "Load"):
             if cand in df_range.columns:
                 mw_col = cand
                 break
