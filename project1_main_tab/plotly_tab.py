@@ -25,6 +25,7 @@ from project1_main_tab.Plotly_modules.plotly_parcoords import plotly_parcoords
 from project1_main_tab.Plotly_modules.plotly_spc_control_chart import plotly_spc_i_chart
 from project1_main_tab.Plotly_modules.plotly_rolling_band import plotly_rolling_band
 from project1_main_tab.Plotly_modules.plotly_mw_binned_scatter import plotly_mw_binned_scatter
+from project1_main_tab.Plotly_modules.plotly_100_stacked_bar import plotly_100_stacked_bar
 from project1_main_tab.plot_tab import MultiRangeDialog
 from project1_main_tab.plot_tab import MultiRangeDialog, SimpleScaleDialog
 IGNORED_COLUMNS = {'datetime', 'date', 'time', 'sourcefolder'}
@@ -107,7 +108,7 @@ class PlotlyTab(QWidget):
 
         self.chart_type_combo = QComboBox()
         self.chart_type_combo.addItems([
-            "Line", "Area", "Scatter", "Bar (Max)", "Z-score Scatter",
+            "Line", "Area", "Scatter", "Bar (Max)", "100% Stacked Bar", "Z-score Scatter",
             "Heatmap Correlation", "Histogram", "Boxplot",
             "Histogram + Boxplot", "Violin", "Pairplot",
             "Pie", "Parallel Coordinates","SPC Control (I-Chart)",
@@ -194,9 +195,11 @@ class PlotlyTab(QWidget):
             self.draw_chart()
 
     def _on_chart_type_changed(self, text: str):
-        is_line = (text or "").lower() == "line"
-        is_bar = (text or "").lower() == "bar (max)"
-        self.range_spin.setVisible(is_line or is_bar)
+        t = (text or "").strip().lower()
+        is_line = (t == "line")
+        is_bar = (t == "bar (max)")
+        is_stacked = (t == "100% stacked bar")
+        self.range_spin.setVisible(is_line or is_bar or is_stacked)
 
     def get_filtered_df(self):
         df_filtered = self.df.copy()
@@ -416,6 +419,28 @@ class PlotlyTab(QWidget):
                     QMessageBox.warning(self, "Thiếu biến", "Parallel Coordinates cần ít nhất 2 biến numeric.")
                     return
                 fig = plotly_parcoords(df_filtered, self.selected_vars)
+            elif chart_type == "100% Stacked Bar":
+                time_ranges = None
+                if self.range_spin.value() > 1 and "Datetime" in self.df.columns:
+                    dlg = MultiRangeDialog(self.range_spin.value(), df=self.df, parent=self)
+                    if dlg.exec():
+                        time_ranges = dlg.get_ranges()
+                    else:
+                        return
+
+                # case anh nói: chỉ chọn 4 feature -> lấy hết làm value_cols
+                value_cols = list(self.selected_vars)
+
+                fig = plotly_100_stacked_bar(
+                    df=self.df,                 # dùng df gốc để multi-range chính xác giống Line
+                    value_cols=value_cols,
+                    group_col=None,             # 1 cột cho mỗi range (Range 1, Range 2...)
+                    title="100% Stacked Bar (by Range)",
+                    decimals=2,
+                    show_percent_text=True,
+                    agg="mean",
+                    time_ranges=time_ranges,    # <<< quan trọng
+                )
         except Exception as e:
             QMessageBox.critical(self, "Lỗi", f"Không vẽ được: {e}")
             return
@@ -427,11 +452,11 @@ class PlotlyTab(QWidget):
                           auto_open=False, config=plot_config)
             self._last_html_path = tmp.name
             self.plot_view.load(QUrl.fromLocalFile(tmp.name))
-        elif chart_type in ["Histogram", "Boxplot", "Violin", "Histogram + Boxplot",
-                    "Heatmap Correlation", "Z-score Scatter", "Pairplot",
+        elif chart_type in ["Histogram", "Boxplot", "Bar (Max)", "Violin", "Histogram + Boxplot",
+                    "Heatmap Correlation", "Z-score Scatter", "100% Stacked Bar", "Pairplot",
                     "Pie", "Parallel Coordinates",
                     "SPC Control (I-Chart)", "Rolling Band", "MW-binned Scatter", "Deviation Baseline"]:
-            QMessageBox.warning(...)
+            QMessageBox.warning(self, "Không hỗ trợ", f"Chưa hỗ trợ chart type: {chart_type}")
 
     def get_last_html_path(self) -> str | None:
         """Đường dẫn file HTML đồ thị cuối — Monitoring load trực tiếp (giống tab Plotly)."""
