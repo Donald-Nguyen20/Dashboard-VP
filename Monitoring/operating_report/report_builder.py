@@ -144,5 +144,5 @@ def build_operating_report(
     else:
         lines.append("<b>3) Xu hướng</b><br>• Không phát hiện xu hướng rõ ràng theo ngưỡng hiện tại.<br><br>")
 
-    lines.append("<i>Ghi chú:</i> Các ngưỡng (shock k, std_ratio, flips, …) có thể tinh chỉnh theo từng hệ thống/thiết bị.")
+    # lines.append("<i>Ghi chú:</i> Các ngưỡng (shock k, std_ratio, flips, …) có thể tinh chỉnh theo từng hệ thống/thiết bị.")
     return "".join(lines)

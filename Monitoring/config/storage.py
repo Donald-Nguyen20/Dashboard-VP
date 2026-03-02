@@ -20,15 +20,15 @@ def get_storage_dir() -> Path:
     storage = base / "Monitoring storage"
     storage.mkdir(parents=True, exist_ok=True)
 
-    # ✅ ẨN folder trên Windows (giống các folder ẩn khác)
-    try:
-        if sys.platform.startswith("win"):
-            import ctypes
-            FILE_ATTRIBUTE_HIDDEN = 0x02
-            FILE_ATTRIBUTE_SYSTEM = 0x04
-            ctypes.windll.kernel32.SetFileAttributesW(str(storage), FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)
-    except Exception:
-        pass
+    # # ✅ ẨN folder trên Windows (giống các folder ẩn khác)
+    # try:
+    #     if sys.platform.startswith("win"):
+    #         # import ctypes
+    #         # FILE_ATTRIBUTE_HIDDEN = 0x02
+    #         # FILE_ATTRIBUTE_SYSTEM = 0x04
+    #         # ctypes.windll.kernel32.SetFileAttributesW(str(storage), FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM)
+    # except Exception:
+    #     pass
 
     return storage
 

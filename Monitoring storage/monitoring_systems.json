@@ -9,6 +9,7 @@
           "row_cols": [
             1,
             2,
+            1,
             1
           ],
           "cells": [
@@ -49,20 +50,14 @@
               }
             },
             {
-              "cell_id": "a440f6cb",
+              "cell_id": "a6e26524",
               "row": 1,
               "col": 1,
               "type": "plotly_spec",
               "plotly_spec": {
-                "chart_type": "Pie",
+                "chart_type": "Rolling Band",
                 "selected_vars": [
-                  "NET MW",
-                  "ECO O/L FG TEMP",
-                  "AH O/L FG TEMP",
-                  "AH I/L PA TEMP",
-                  "AH O/L PA TEMP",
-                  "AH I/L SECAIR TEMP",
-                  "AH O/L SECAIR TEMP"
+                  "CHENHAP"
                 ],
                 "range_spin": 1
               }
@@ -79,8 +74,34 @@
                 ],
                 "range_spin": 1
               }
+            },
+            {
+              "cell_id": "935e0173",
+              "row": 3,
+              "col": 0,
+              "type": "plotly_spec",
+              "plotly_spec": {
+                "chart_type": "Violin",
+                "selected_vars": [
+                  "DP_AH"
+                ],
+                "range_spin": 1
+              }
             }
           ]
+        }
+      }
+    },
+    {
+      "id": "b7cd22a4",
+      "name": "dd",
+      "created_at": "",
+      "config": {
+        "layout": {
+          "row_cols": [
+            1
+          ],
+          "cells": []
         }
       }
     }

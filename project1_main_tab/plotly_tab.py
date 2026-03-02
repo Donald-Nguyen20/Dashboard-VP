@@ -249,20 +249,24 @@ class PlotlyTab(QWidget):
             )
 
             time_ranges = None
-            if self.range_spin.value() > 1 and "Datetime" in self.df.columns:
-                dlg = MultiRangeDialog(self.range_spin.value(), df=self.df, parent=self)
+
+            # ✅ 1) check theo df_filtered (không check self.df)
+            if self.range_spin.value() > 1 and "Datetime" in df_filtered.columns:
+
+                # ✅ 2) dialog nhận df_filtered để khoảng range chỉ nằm trong cửa sổ đã lọc
+                dlg = MultiRangeDialog(self.range_spin.value(), df=df_filtered, parent=self)
                 if dlg.exec():
                     time_ranges = dlg.get_ranges()
                 else:
                     return
 
-            # luôn vẽ từ df gốc (để scale + multi-range chính xác)
+            # ✅ 3) vẽ từ df_filtered (không vẽ từ self.df)
             fig = plotly_line_chart(
-                self.df,
+                df_filtered,
                 x,
                 self.selected_vars,
                 time_ranges=time_ranges,
-                scales=self.scales,   # ← dòng quan trọng nhất
+                scales=self.scales,   # giữ nguyên scale như anh muốn
             )
 
             self._last_fig = fig
@@ -287,28 +291,25 @@ class PlotlyTab(QWidget):
             return
         elif chart_type == "Bar (Max)":
             time_ranges = None
-            if self.range_spin.value() > 1 and "Datetime" in self.df.columns:
-                dlg = MultiRangeDialog(self.range_spin.value(), df=self.df, parent=self)
+            if self.range_spin.value() > 1 and "Datetime" in df_filtered.columns:
+                dlg = MultiRangeDialog(self.range_spin.value(), df=df_filtered, parent=self)
                 if dlg.exec():
                     time_ranges = dlg.get_ranges()
                 else:
                     return
+
             fig = plotly_bar_max(
-                self.df,
+                df_filtered,                 # ✅ dùng df_filtered
                 self.selected_vars,
-                title="Max value (within selected time range)",
-                time_ranges=time_ranges,
+                title="Max value",
+                time_ranges=time_ranges,     # ✅ vẫn giữ range > 1
+                # scales=self.scales  # nếu bar module của anh có scales thì giữ, không có thì bỏ
             )
+
             self._last_fig = fig
-            plot_config = {
-                "responsive": True,
-                "displayModeBar": True,
-                "scrollZoom": True,
-                "displaylogo": False,
-            }
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
-            pio.write_html(fig, file=tmp.name, include_plotlyjs=True, full_html=True,
-                          auto_open=False, config=plot_config)
+            plot_config = {"responsive": True, "displayModeBar": True, "scrollZoom": True, "displaylogo": False}
+            pio.write_html(fig, file=tmp.name, include_plotlyjs=True, full_html=True, auto_open=False, config=plot_config)
             self._last_html_path = tmp.name
             self.plot_view.load(QUrl.fromLocalFile(tmp.name))
             return

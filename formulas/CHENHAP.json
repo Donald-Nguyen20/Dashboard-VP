@@ -1,0 +1,6 @@
+{
+    "df": "duchien",
+    "formula_name": "CHENHAP",
+    "formula": "`AH O/L FG PRS`-`ECO O/L FG PRS`",
+    "alert_condition": ""
+}
