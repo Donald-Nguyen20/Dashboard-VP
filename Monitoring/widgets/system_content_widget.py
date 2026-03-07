@@ -701,7 +701,7 @@ class SystemContentWidget(QWidget):
 
         # 5) chọn MW column (nếu có)
         mw_col = None
-        for cand in ("NET MW", "GEN PWR (GEN SID)", "MWD4", "Unit Load", "Load"):
+        for cand in ("NET MW", "GEN PWR (GEN SID)", "MWD4", "GT ACTV PWR (MW)", "GEN PWR (GT SID)"):
             if cand in df_range.columns:
                 mw_col = cand
                 break

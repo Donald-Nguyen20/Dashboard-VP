@@ -129,11 +129,11 @@ def plotly_bar_max(
     maxs = [mm[t][1] for t in tags]
     deltas = [max(mx - mn, 0.0) for mn, mx in zip(mins, maxs)]
 
-    order = sorted(range(len(tags)), key=lambda i: maxs[i], reverse=True)
-    tags = [tags[i] for i in order]
-    mins = [mins[i] for i in order]
-    maxs = [maxs[i] for i in order]
-    deltas = [deltas[i] for i in order]
+    # order = sorted(range(len(tags)), key=lambda i: maxs[i], reverse=True)
+    # tags = [tags[i] for i in order]
+    # mins = [mins[i] for i in order]
+    # maxs = [maxs[i] for i in order]
+    # deltas = [deltas[i] for i in order]
 
     fig = go.Figure()
 
