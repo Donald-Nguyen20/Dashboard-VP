@@ -99,9 +99,30 @@
       "config": {
         "layout": {
           "row_cols": [
+            1,
             1
           ],
-          "cells": []
+          "cells": [
+            {
+              "cell_id": "ab1b8550",
+              "row": 0,
+              "col": 0,
+              "type": "echarts",
+              "echarts_config": {
+                "chart_type": "line",
+                "title": "",
+                "selected_vars": [
+                  "NET MW",
+                  "ECO O/L FG TEMP",
+                  "AH O/L FG TEMP",
+                  "AH I/L PA TEMP",
+                  "AH O/L PA TEMP",
+                  "AH I/L SECAIR TEMP"
+                ],
+                "smooth": true
+              }
+            }
+          ]
         }
       }
     }

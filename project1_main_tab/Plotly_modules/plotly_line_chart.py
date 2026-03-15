@@ -48,7 +48,7 @@ def plotly_line_chart(df, x, y_columns, title="Multi-Line Chart", time_ranges=No
                 fig.add_trace(go.Scatter(
                     x=plot_df["x"], y=plot_df["y"], mode="lines",
                     name=name,
-                    line=dict(color=color, width=2),
+                    line=dict(color=color, width=2, shape="spline", smoothing=1.3),
                     customdata=plot_df[["y_raw", "scale"]],
                     hovertemplate=(
                         f"<b>{col}</b><br>"
@@ -100,6 +100,7 @@ def plotly_line_chart(df, x, y_columns, title="Multi-Line Chart", time_ranges=No
             y=plot_df["y"],
             mode="lines",
             name=name,
+            line=dict(shape="spline", smoothing=1.3),
             customdata=plot_df[["y_raw", "scale"]],
             hovertemplate=(
                 f"<b>{col}</b><br>"

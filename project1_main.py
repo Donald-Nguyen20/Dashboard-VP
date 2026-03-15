@@ -91,7 +91,7 @@ QLineEdit:focus {
     padding: px 20px;
     min-height: 17px;
 
-                                         
+
 }
 QPushButton:hover {
     background-color: #1d2b4f;
