@@ -20,7 +20,7 @@ cập nhật predict theo khoảng thời gian
 cập nhật màu sắc theo win 11 + chức năng analysis report
 phân loại 2 mốc tải và tháng 
 tạo thư viện mới plotly
-pyinstaller --onefile .\master_window.py --icon=DFA.ico --noconfirm --clean --console `
+pyinstaller --onedir .\master_window.py --icon=DFA.ico --noconfirm --clean --console `
   --add-data "ML_TAB\assets;ML_TAB\assets" `
   --exclude-module tkinter --exclude-module _tkinter `
   --exclude-module PyQt5 --exclude-module PyQt6 `
@@ -30,9 +30,20 @@ pyinstaller --onefile .\master_window.py --icon=DFA.ico --noconfirm --clean --co
   --exclude-module spacy --exclude-module thinc --exclude-module langcodes `
   --exclude-module nltk --exclude-module transformers `
   --exclude-module librosa --exclude-module soundfile `
-  --exclude-module pyarrow --exclude-module fsspec `
+  --exclude-module fsspec `
   --exclude-module OpenGL --exclude-module pygame --exclude-module cv2 `
   --exclude-module IPython --exclude-module notebook --exclude-module nbformat --exclude-module nbconvert --exclude-module jupyterlab `
   --exclude-module faiss --exclude-module faiss_cpu --exclude-module rapidfuzz `
-  --exclude-module pytest `
-  --exclude-module sympy
+  --exclude-module pytest --exclude-module sympy `
+  --exclude-module skimage --exclude-module imageio `
+  --exclude-module altair `
+  --exclude-module kaleido `
+  --exclude-module patsy --exclude-module statsmodels `
+  --exclude-module pywt `
+  --exclude-module pygments `
+  --exclude-module win32com --exclude-module pythoncom --exclude-module win32api `
+  --exclude-module psutil `
+  --exclude-module cupy --exclude-module dask
+
+# Ẩn thư mục _internal sau khi build xong
+attrib +h +s "dist\master_window\_internal"
