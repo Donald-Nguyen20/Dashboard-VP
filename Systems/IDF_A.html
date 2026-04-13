@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ID Fan Dashboard — Van Phong 1</title>
+<script src="chart.umd.js"></script>
+<style>
+  :root {
+    --bg:     #f5f6f8;
+    --bg2:    #ffffff;
+    --bg3:    #f0f1f4;
+    --border: #dde0e8;
+    --border2:#c8ccd8;
+    --text:   #1a1d26;
+    --text2:  #50566a;
+    --text3:  #8a90a0;
+
+    --amber:  #c47a10;
+    --amber-bg: #fff7e6;
+    --amber-bd: #f5c060;
+
+    --blue:   #1a6fd4;
+    --blue-bg:#e8f1fd;
+    --blue-bd:#7fb4ee;
+
+    --green:  #1e7e3e;
+    --green-bg:#e8f7ec;
+    --green-bd:#72c98a;
+
+    --red:    #c0281e;
+    --red-bg: #fdf0ee;
+    --red-bd: #e8908a;
+
+    --teal:   #0e7a60;
+    --teal-bg:#e6f6f2;
+    --teal-bd:#6ecbb4;
+
+    --yellow: #926010;
+    --yellow-bg:#fffae6;
+    --yellow-bd:#f0d060;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif; font-size:13px; }
+
+  .page { max-width:1480px; margin:0 auto; padding:18px 20px; }
+
+  .top-bar { display:flex; align-items:center; justify-content:space-between;
+             padding:12px 18px; background:var(--bg2); border:1px solid var(--border);
+             border-radius:10px; margin-bottom:14px; box-shadow:0 1px 4px rgba(0,0,0,.06); }
+  .top-logo { font-size:17px; font-weight:700; color:var(--amber); letter-spacing:1.5px; }
+  .top-sub  { color:var(--text2); font-size:11px; line-height:1.7; margin-left:14px; }
+  .status-pill { display:flex; align-items:center; gap:6px; padding:4px 14px;
+                 border-radius:20px; border:1px solid var(--green-bd);
+                 background:var(--green-bg); font-size:11px; font-weight:600; color:var(--green); }
+  .pulse { width:7px; height:7px; border-radius:50%; background:var(--green); animation:pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .kpi-row { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:9px; margin-bottom:14px; }
+  .kpi { background:var(--bg2); border:1px solid var(--border); border-radius:9px;
+         padding:11px 14px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .kpi-label { font-size:10px; color:var(--text3); letter-spacing:.04em; margin-bottom:5px; text-transform:uppercase; }
+  .kpi-val   { font-size:22px; font-weight:700; line-height:1; }
+  .kpi-unit  { font-size:10px; color:var(--text2); margin-top:3px; }
+  .kpi-sub   { font-size:10px; color:var(--text3); margin-top:2px; }
+  .c-amber { color:var(--amber); } .c-blue { color:var(--blue); }
+  .c-green { color:var(--green); } .c-red  { color:var(--red); }
+  .c-teal  { color:var(--teal); } .c-yellow{ color:var(--yellow); }
+
+  .panel { background:var(--bg2); border:1px solid var(--border); border-radius:10px;
+           padding:16px 18px; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+  .panel-title { font-size:11px; font-weight:700; color:var(--text2); letter-spacing:.07em;
+                 text-transform:uppercase; margin-bottom:2px; }
+  .panel-sub   { font-size:10px; color:var(--text3); margin-bottom:12px; }
+  .section-title { font-size:10px; font-weight:700; color:var(--text3); letter-spacing:.07em;
+                   text-transform:uppercase; margin:10px 0 7px;
+                   padding-bottom:5px; border-bottom:1px solid var(--border); }
+
+  .chart-wrap { position:relative; width:100%; }
+  .charts-2col { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+
+  .legend-row { display:flex; flex-wrap:wrap; gap:7px 10px; margin-bottom:10px; align-items:center; }
+  .leg-item { display:flex; align-items:center; gap:5px; font-size:10px; color:var(--text2); }
+  .op-badge { font-size:10px; font-weight:600; padding:2px 9px; border-radius:4px; border:1px solid; }
+
+  .load-tabs { display:flex; gap:6px; margin-bottom:12px; }
+  .load-tab { font-size:11px; padding:4px 12px; border-radius:6px;
+              border:1px solid var(--border2); background:var(--bg3);
+              color:var(--text2); cursor:pointer; font-family:inherit; font-weight:500; }
+  .load-tab.active { border-color:var(--amber-bd); background:var(--amber-bg); color:var(--amber); }
+
+  .bottom-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+
+  .alarm-row { display:flex; align-items:center; justify-content:space-between;
+               padding:5px 0; border-bottom:1px solid var(--border); }
+  .alarm-row:last-child { border-bottom:none; }
+  .alarm-name { color:var(--text2); font-size:11px; display:flex; align-items:center; gap:6px; }
+  .alarm-val  { font-size:11px; font-weight:600; color:var(--text); text-align:right; }
+  .alarm-limit{ font-size:10px; color:var(--text3); margin-left:5px; }
+  .dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .dot-ok   { background:var(--green); }
+  .dot-warn { background:var(--amber); }
+  .dot-err  { background:var(--red); }
+
+  .vib-track { width:100%; height:12px; background:var(--bg3); border-radius:6px;
+               position:relative; overflow:visible; border:1px solid var(--border); }
+  .vib-fill  { height:100%; border-radius:6px; background:linear-gradient(90deg,#1e7e3e,#50c878); }
+  .vib-marker{ position:absolute; top:-4px; bottom:-4px; width:2px; border-radius:1px; }
+  .vib-ticks { display:flex; justify-content:space-between; font-size:9px; color:var(--text3); margin-top:4px; }
+
+  .spec-row { display:flex; justify-content:space-between; padding:5px 0;
+              border-bottom:1px solid var(--border); font-size:11px; }
+  .spec-row:last-child { border-bottom:none; }
+  .spec-label { color:var(--text2); }
+  .spec-val   { font-weight:600; color:var(--text); text-align:right; }
+
+  .tag { display:inline-block; font-size:9px; padding:2px 7px; border-radius:3px; font-weight:700; letter-spacing:.05em; }
+  .tag-ok   { background:var(--green-bg); color:var(--green);  border:1px solid var(--green-bd); }
+  .tag-warn { background:var(--yellow-bg);color:var(--yellow); border:1px solid var(--yellow-bd); }
+  .tag-blue { background:var(--blue-bg);  color:var(--blue);   border:1px solid var(--blue-bd); }
+  .tag-amber{ background:var(--amber-bg); color:var(--amber);  border:1px solid var(--amber-bd); }
+  .tag-red  { background:var(--red-bg);   color:var(--red);    border:1px solid var(--red-bd); }
+
+  .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+  .detail-card { background:var(--bg3); border:1px solid var(--border); border-radius:7px; padding:8px 11px; font-size:11px; }
+  .detail-card-label { font-size:9px; color:var(--text3); text-transform:uppercase; letter-spacing:.05em; margin-bottom:3px; }
+  .bar-row { margin:5px 0; }
+  .bar-label { display:flex; justify-content:space-between; font-size:10px; margin-bottom:3px; color:var(--text2); }
+  .bar-bg { background:var(--bg3); border-radius:3px; height:7px; border:1px solid var(--border); }
+  .bar-fill { height:100%; border-radius:3px; }
+
+  .timestamp { font-size:10px; color:var(--text3); text-align:right; margin-top:10px; }
+
+  @media (max-width:900px) {
+    .kpi-row { grid-template-columns:repeat(3,1fr); }
+    .bottom-row { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- Header -->
+<div class="top-bar">
+  <div style="display:flex;align-items:center;">
+    <div class="top-logo">ID FAN</div>
+    <div class="top-sub">
+      B65 4112.00.01 DBV6F &nbsp;·&nbsp; Howden &nbsp;·&nbsp; Van Phong 1 BOT Thermal Power Plant<br>
+      Item: =10/20HNC01/02 AN001 &nbsp;·&nbsp; Centrifugal DIDW &nbsp;·&nbsp; Backward inclined aerofoil &nbsp;·&nbsp; 10 blades
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <div style="text-align:right;font-size:10px;color:var(--text3);">743 rpm &nbsp;·&nbsp; 50 Hz &nbsp;·&nbsp; 1.0 atmA &nbsp;·&nbsp; T<sub>amb</sub> = 26.5°C</div>
+    <div class="status-pill"><div class="pulse"></div>RUNNING</div>
+  </div>
+</div>
+
+<!-- KPI Row -->
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="kpi-label">Fan Speed</div>
+    <div class="kpi-val c-amber">743</div>
+    <div class="kpi-unit">rpm</div>
+    <div class="kpi-sub">Critical: 1,825 rpm</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Shaft Power</div>
+    <div class="kpi-val c-blue">6,230</div>
+    <div class="kpi-unit">kW (Design)</div>
+    <div class="kpi-sub">Motor rated: 6,853 kW</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Inlet Volume Flow</div>
+    <div class="kpi-val c-teal">553.2</div>
+    <div class="kpi-unit">m³/s (Design)</div>
+    <div class="kpi-sub">&rho;&#x2081; = 0.8207 kg/m³</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Static Pressure Rise</div>
+    <div class="kpi-val c-amber">9,662</div>
+    <div class="kpi-unit">Pa (Design)</div>
+    <div class="kpi-sub">ps1 = &minus;6,021 Pa G</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Static Efficiency</div>
+    <div class="kpi-val c-green">83.0</div>
+    <div class="kpi-unit">% (Design)</div>
+    <div class="kpi-sub">40% NDC: 51.8%</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-label">Inlet Gas Temperature</div>
+    <div class="kpi-val c-red">138</div>
+    <div class="kpi-unit">°C (all loads)</div>
+    <div class="kpi-sub">Mech. max: 260°C</div>
+  </div>
+</div>
+
+<!-- Performance Curves -->
+<div class="panel" style="margin-bottom:14px;">
+  <div class="panel-title">Fan Performance Characteristic Curves — B65 4112.00.01 DBV6F · Constant Speed 743 rpm</div>
+  <div class="panel-sub">
+    Plotted at density 0.8207 kg/m³ &nbsp;·&nbsp; Fan Inlet Area = 24.351 m² &nbsp;·&nbsp;
+    Fan Discharge Area = 11.959 m² &nbsp;·&nbsp; Diffuser Area = 22.638 m²
+  </div>
+
+  <div class="legend-row" id="curveLegend"></div>
+
+  <div class="charts-2col">
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-align:center;margin-bottom:6px;">
+        Static Pressure Rise (Pa) vs Volume Flow (m³/s)
+      </div>
+      <div class="chart-wrap" style="height:420px;">
+        <canvas id="spChart" role="img"
+          aria-label="Static pressure rise vs volume flow at 743 rpm for inlet vane angles 0° to -90°">
+          Fan static pressure performance curves at 743 rpm.
+        </canvas>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-align:center;margin-bottom:6px;">
+        Fan Shaft Power (kW) vs Volume Flow (m³/s)
+      </div>
+      <div class="chart-wrap" style="height:420px;">
+        <canvas id="pwChart" role="img"
+          aria-label="Shaft power vs volume flow at 743 rpm for inlet vane angles 0° to -90°">
+          Fan shaft power curves at 743 rpm.
+        </canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Load detail + Bar comparison -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+  <div class="panel">
+    <div class="panel-title">Operating Point Detail</div>
+    <div class="load-tabs" id="loadTabs">
+      <button class="load-tab active" data-i="0">① Design</button>
+      <button class="load-tab" data-i="1">② BMCR</button>
+      <button class="load-tab" data-i="2">③ NDC</button>
+      <button class="load-tab" data-i="3">④ 40% NDC</button>
+    </div>
+    <div id="loadDetail"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Load Comparison</div>
+    <div class="panel-sub">Shaft power (kW) and static efficiency (%)</div>
+    <div class="chart-wrap" style="height:195px;">
+      <canvas id="barChart" role="img"
+        aria-label="Bar chart comparing shaft power and static efficiency across 4 operating points">
+        Power and efficiency comparison.
+      </canvas>
+    </div>
+    <div style="margin-top:12px;">
+      <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">
+        Inlet Volume Flow Rate (m³/s)
+      </div>
+      <div class="chart-wrap" style="height:85px;">
+        <canvas id="flowChart" role="img" aria-label="Volume flow rate comparison">Volume flow comparison.</canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom 3-col -->
+<div class="bottom-row">
+
+  <!-- Vibration + Lubrication -->
+  <div class="panel">
+    <div class="section-title" style="margin-top:0;">Vibration Monitoring</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+      <div style="background:var(--yellow-bg);border:1px solid var(--yellow-bd);border-radius:7px;padding:9px 12px;text-align:center;">
+        <div style="font-size:9px;color:var(--yellow);text-transform:uppercase;font-weight:700;letter-spacing:.05em;">Alarm</div>
+        <div style="font-size:22px;font-weight:700;color:var(--amber);">4.5</div>
+        <div style="font-size:10px;color:var(--text3);">mm/s</div>
+      </div>
+      <div style="background:var(--red-bg);border:1px solid var(--red-bd);border-radius:7px;padding:9px 12px;text-align:center;">
+        <div style="font-size:9px;color:var(--red);text-transform:uppercase;font-weight:700;letter-spacing:.05em;">Trip</div>
+        <div style="font-size:22px;font-weight:700;color:var(--red);">7.1</div>
+        <div style="font-size:10px;color:var(--text3);">mm/s</div>
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--text2);margin-bottom:5px;display:flex;justify-content:space-between;">
+      <span>Current vibration</span>
+      <span style="font-weight:700;color:var(--green);">3.2 mm/s &nbsp;<span class="tag tag-ok">NORMAL</span></span>
+    </div>
+    <div class="vib-track">
+      <div class="vib-fill" style="width:45%;"></div>
+      <div class="vib-marker" style="left:63.4%;background:var(--amber);"></div>
+      <div class="vib-marker" style="left:99%;background:var(--red);"></div>
+    </div>
+    <div class="vib-ticks">
+      <span>0</span><span>1</span><span>2</span>
+      <span style="color:var(--green);font-weight:600;">3.2</span>
+      <span style="color:var(--amber);font-weight:600;">4.5 ⚠</span>
+      <span>5</span><span>6</span>
+      <span style="color:var(--red);font-weight:600;">7.1 ✕</span>
+    </div>
+
+    <div class="section-title">Lubrication &amp; Cooling</div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Fan lube oil</span><span class="alarm-val">10.8–12.6 l/min<span class="alarm-limit"> / bearing</span></span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Fan jacking oil</span><span class="alarm-val">5.4 l/min<span class="alarm-limit"> / bearing</span></span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Motor lube oil</span><span class="alarm-val">7–10 l/min<span class="alarm-limit"> / bearing</span></span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Cooling water</span><span class="alarm-val">3 m³/h<span class="alarm-limit"> / lube system</span></span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Shaft seal</span><span class="alarm-val">Single carbon ring</span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Bearing type</span><span class="alarm-val">Sleeve — oil ring lube</span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Coupling</span><span class="alarm-val">Spacer, disc type</span></div>
+  </div>
+
+  <!-- Key monitoring parameters -->
+  <div class="panel">
+    <div class="section-title" style="margin-top:0;">Key Monitoring Parameters</div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Fan speed</span><span class="alarm-val">743 rpm<span class="alarm-limit"> &nbsp; critical: 1,825</span></span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Inlet gas temperature (t1)</span><span class="alarm-val">138 °C<span class="alarm-limit"> &nbsp; max: 260°</span></span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Inlet static pressure (ps1)</span><span class="alarm-val">&minus;6,021 Pa G</span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Outlet static pressure (ps2')</span><span class="alarm-val">+3,641 Pa G</span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Static pressure rise (&Delta;P)</span><span class="alarm-val">9,662 Pa</span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Fan shaft power</span><span class="alarm-val">6,230 kW<span class="alarm-limit"> &nbsp; max: 6,853</span></span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Inlet volume flow rate</span><span class="alarm-val">553.2 m³/s</span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Mass flow rate</span><span class="alarm-val">454.0 kg/s</span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Dust content</span><span class="alarm-val">100 mg/Nm³</span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Motor starting current</span><span class="alarm-val">&lt; 500% FLA</span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Starting torque</span><span class="alarm-val">12,031 Nm</span></div>
+    <div class="alarm-row"><span class="alarm-name"><div class="dot dot-ok"></div>Rotor inertia (Mr²)</span><span class="alarm-val">26,128 kg·m²</span></div>
+
+    <div class="section-title">Starting Procedure</div>
+    <div class="alarm-row"><span class="alarm-name">Inlet vane position at start</span><span class="alarm-val"><span class="tag tag-warn">Fully Closed</span></span></div>
+    <div class="alarm-row"><span class="alarm-name">Discharge damper at start</span><span class="alarm-val"><span class="tag tag-warn">Fully Open</span></span></div>
+    <div class="alarm-row"><span class="alarm-name">Open inlet vanes after min speed</span><span class="alarm-val">&#8805; 10°</span></div>
+  </div>
+
+  <!-- Key specifications -->
+  <div class="panel">
+    <div class="section-title" style="margin-top:0;">Key Item Specifications</div>
+    <div class="spec-row"><span class="spec-label">Fan type</span><span class="spec-val">Centrifugal DIDW</span></div>
+    <div class="spec-row"><span class="spec-label">Blade design</span><span class="spec-val">Backward inclined aerofoil</span></div>
+    <div class="spec-row"><span class="spec-label">Impeller diameter</span><span class="spec-val">4,112 mm</span></div>
+    <div class="spec-row"><span class="spec-label">Tip speed of blades</span><span class="spec-val">160 m/s</span></div>
+    <div class="spec-row"><span class="spec-label">No. of blades / stages</span><span class="spec-val">10 / 1</span></div>
+    <div class="spec-row"><span class="spec-label">Shaft dia. at bearings</span><span class="spec-val">300 mm</span></div>
+    <div class="spec-row"><span class="spec-label">Shaft dia. at hub</span><span class="spec-val">858 mm</span></div>
+    <div class="spec-row"><span class="spec-label">Fan rotor weight</span><span class="spec-val">23,420 kg</span></div>
+    <div class="spec-row"><span class="spec-label">Fan casing weight</span><span class="spec-val">41,360 kg</span></div>
+    <div class="spec-row"><span class="spec-label">Motor weight</span><span class="spec-val">33,700 kg</span></div>
+
+    <div class="section-title">Material List</div>
+    <div class="spec-row"><span class="spec-label">Blades</span><span class="spec-val">STRENX 700E, 6 mm</span></div>
+    <div class="spec-row"><span class="spec-label">Shaft</span><span class="spec-val">S355</span></div>
+    <div class="spec-row"><span class="spec-label">Backplate / Sideplate</span><span class="spec-val">STRENX 700E, 25/20 mm</span></div>
+    <div class="spec-row"><span class="spec-label">Shaft sleeve</span><span class="spec-val">AISI 316L Stainless</span></div>
+    <div class="spec-row"><span class="spec-label">Casing &amp; inlet box</span><span class="spec-val">S235jr / SS400, 8–12 mm</span></div>
+    <div class="spec-row"><span class="spec-label">Inlet vane control</span><span class="spec-val">Carbon Steel, Radial auto</span></div>
+
+    <div class="timestamp" id="tsDisplay"></div>
+  </div>
+
+</div>
+</div>
+
+<script>
+const V = Array.from({length:21}, (_,i) => i*50);
+
+const angleData = [
+  { a:'0°',   sp:[12200,12050,11750,11300,10700,9950,9050,8000,6800,5450,3950,2300,500,  null,null,null,null,null,null,null,null],
+               pw:[1100, 1700, 2450, 3250, 4100, 5000,5850,6500,6900,7000,6900,6600,6100,null,null,null,null,null,null,null,null] },
+  { a:'-10°', sp:[10900,10750,10450,10000,9400, 8650,7750,6700,5500,4150,2650,1000,null,null,null,null,null,null,null,null,null],
+               pw:[1000, 1550, 2200, 2950, 3750, 4550,5300,5850,6100,6150,5950,5500,null,null,null,null,null,null,null,null,null] },
+  { a:'-20°', sp:[9300, 9150, 8850, 8400, 7800, 7050,6150,5100,3900,2550,1050,null,null,null,null,null,null,null,null,null,null],
+               pw:[900,  1400, 2000, 2650, 3350, 4050,4700,5200,5450,5400,5150,null,null,null,null,null,null,null,null,null,null] },
+  { a:'-30°', sp:[7700, 7550, 7250, 6800, 6250, 5550,4700,3700,2550,1250,null,null,null,null,null,null,null,null,null,null,null],
+               pw:[800,  1200, 1700, 2300, 2900, 3500,4050,4450,4650,4550,null,null,null,null,null,null,null,null,null,null,null] },
+  { a:'-40°', sp:[6100, 5950, 5700, 5300, 4800, 4200,3450,2600,1600,450, null,null,null,null,null,null,null,null,null,null,null],
+               pw:[700,  1050, 1500, 2000, 2550, 3050,3500,3800,3900,3750,null,null,null,null,null,null,null,null,null,null,null] },
+  { a:'-50°', sp:[4700, 4550, 4300, 3950, 3500, 2950,2300,1550,700, null,null,null,null,null,null,null,null,null,null,null,null],
+               pw:[600,  900,  1250, 1650, 2100, 2550,2950,3200,3250,null,null,null,null,null,null,null,null,null,null,null,null] },
+  { a:'-60°', sp:[3400, 3300, 3100, 2800, 2400, 1950,1400,750, null,null,null,null,null,null,null,null,null,null,null,null,null],
+               pw:[500,  750,  1050, 1400, 1780, 2150,2450,2650,null,null,null,null,null,null,null,null,null,null,null,null,null] },
+  { a:'-70°', sp:[2400, 2300, 2150, 1900, 1600, 1250,800, 300, null,null,null,null,null,null,null,null,null,null,null,null,null],
+               pw:[400,  620,  870,  1160, 1470, 1770,2020,2200,null,null,null,null,null,null,null,null,null,null,null,null,null] },
+  { a:'-80°', sp:[1350, 1280, 1180, 1020, 820,  580, 300, null,null,null,null,null,null,null,null,null,null,null,null,null,null],
+               pw:[300,  460,  650,  860,  1080, 1280,1430,null,null,null,null,null,null,null,null,null,null,null,null,null,null] },
+  { a:'-90°', sp:[550,  510,  450,  370,  270,  150, null,null,null,null,null,null,null,null,null,null,null,null,null,null,null],
+               pw:[180,  270,  380,  500,  610,  700, null,null,null,null,null,null,null,null,null,null,null,null,null,null,null] },
+];
+
+const curveColors = ['#1a3e8c','#2e6bb0','#1e8a5e','#3aaa7a','#c87010','#e8a020','#a02030','#d04050','#6a35b0','#999999'];
+const dashPats   = [[],[],[],[],[6,3],[6,3],[6,3],[6,3],[3,3],[3,3]];
+
+const opPoints = [
+  { x:553.2, y:9662, pw:6230, label:'①', col:'#1a1d26', bg:'rgba(26,29,38,0.10)'   },
+  { x:453.6, y:7157, pw:4571, label:'②', col:'#1a6fd4', bg:'rgba(26,111,212,0.12)' },
+  { x:433.4, y:6863, pw:4344, label:'③', col:'#1e7e3e', bg:'rgba(30,126,62,0.12)'  },
+  { x:237.3, y:7157, pw:3225, label:'④', col:'#c0281e', bg:'rgba(192,40,30,0.12)'  },
+];
+
+// ⊕ marker canvas
+function makeCircleCross(col, size=18) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const r = size/2 - 1.5, cx = size/2, cy = size/2;
+  ctx.strokeStyle = col; ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx-r,cy); ctx.lineTo(cx+r,cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,cy-r); ctx.lineTo(cx,cy+r); ctx.stroke();
+  return c;
+}
+
+// System resistance curve: ΔP = k·Q²,  k = 9662/553.2² ≈ 0.03158
+const sysResData = Array.from({length:13},(_,i)=>{
+  const q=i*50; return {x:q, y:Math.round(0.03158*q*q)};
+});
+
+// Surge/stall boundary (approximate from catalog curves)
+const stallBoundary = [
+  {x:0,y:0},{x:10,y:1800},{x:25,y:5200},{x:40,y:8200},{x:55,y:10200},
+  {x:70,y:11400},{x:82,y:11700},{x:92,y:11600},{x:98,y:11300},
+  {x:100,y:10900},{x:95,y:10000},{x:85,y:8500},{x:70,y:6500},
+  {x:52,y:4000},{x:35,y:2000},{x:15,y:500},{x:0,y:0}
+];
+
+function toScatter(arr) {
+  return arr.map((v,i) => v !== null ? {x:V[i], y:v} : null).filter(Boolean);
+}
+
+// Plugin: vẽ vùng stall (chỉ dùng cho SP chart)
+const stallPlugin = {
+  id:'stallRegion',
+  beforeDatasetsDraw(chart) {
+    if (!chart.config._isSPChart) return;
+    const {ctx, scales:{x,y}} = chart;
+    ctx.save();
+    ctx.beginPath();
+    stallBoundary.forEach(({x:qv,y:pa},i) => {
+      const px = x.getPixelForValue(qv), py = y.getPixelForValue(pa);
+      i===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
+    });
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(140,140,140,0.22)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(100,100,100,0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+};
+Chart.register(stallPlugin);
+
+function makeSPDatasets() {
+  const ds = angleData.map((c,i) => ({
+    label: c.a, data: toScatter(c.sp),
+    borderColor: curveColors[i], borderWidth: 1.8, borderDash: dashPats[i],
+    pointRadius: 0, fill: false, tension: 0.35, showLine: true,
+  }));
+  // System resistance parabola
+  ds.push({
+    label:'System Resistance', data: sysResData,
+    borderColor:'#1a1d26', borderWidth: 2, borderDash:[],
+    pointRadius: 0, fill: false, tension: 0.3, showLine: true,
+  });
+  // Operating points ⊕
+  opPoints.forEach(p => {
+    const img = makeCircleCross(p.col);
+    ds.push({
+      label: p.label, data: [{x:p.x, y:p.y}],
+      borderColor: p.col, backgroundColor: 'transparent',
+      pointRadius: 9, pointStyle: img, showLine: false, pointBorderWidth: 0,
+    });
+  });
+  return ds;
+}
+
+function makePWDatasets() {
+  const ds = angleData.map((c,i) => ({
+    label: c.a, data: toScatter(c.pw),
+    borderColor: curveColors[i], borderWidth: 1.8, borderDash: dashPats[i],
+    pointRadius: 0, fill: false, tension: 0.35, showLine: true,
+  }));
+  opPoints.forEach(p => {
+    const img = makeCircleCross(p.col);
+    ds.push({
+      label: p.label, data: [{x:p.x, y:p.pw}],
+      borderColor: p.col, backgroundColor: 'transparent',
+      pointRadius: 9, pointStyle: img, showLine: false, pointBorderWidth: 0,
+    });
+  });
+  return ds;
+}
+
+const gridC = 'rgba(0,0,0,0.08)';
+const tickC = '#8a90a0';
+const baseOpts = (yLabel, yMax, yStep) => ({
+  responsive: true, maintainAspectRatio: false, animation: {duration:500},
+  plugins: {
+    legend: {display:false},
+    tooltip: {
+      backgroundColor:'rgba(255,255,255,0.97)', borderColor:'#dde0e8', borderWidth:1,
+      titleColor:'#1a1d26', bodyColor:'#50566a', padding:9,
+      callbacks: {
+        label: ctx => `${ctx.dataset.label}: ${Math.round(ctx.parsed.y).toLocaleString()} ${yLabel} @ ${Math.round(ctx.parsed.x)} m\u00b3/s`
+      }
+    }
+  },
+  scales: {
+    x: { type:'linear', min:0, max:1000,
+         title:{display:true, text:'Volume (m\u00b3/s)', color:tickC, font:{size:11}},
+         ticks:{color:tickC, font:{size:10}, stepSize:100},
+         grid:{color:gridC}, border:{color:'#bbb'} },
+    y: { type:'linear', min:0, max:yMax,
+         title:{display:true, text:yLabel, color:tickC, font:{size:11}},
+         ticks:{color:tickC, font:{size:10}, stepSize:yStep},
+         grid:{color:gridC}, border:{color:'#bbb'} }
+  }
+});
+
+const spCfg = baseOpts('Static Pressure Rise Across Fan (Pa)', 12000, 1000);
+spCfg._isSPChart = true;
+new Chart(document.getElementById('spChart'), {
+  type:'scatter', data:{datasets: makeSPDatasets()}, options: spCfg,
+});
+new Chart(document.getElementById('pwChart'), {
+  type:'scatter', data:{datasets: makePWDatasets()},
+  options: baseOpts('Fan Shaft Power (kW)', 8000, 1000),
+});
+
+// Legend
+const legEl = document.getElementById('curveLegend');
+angleData.forEach((c,i) => {
+  const d = document.createElement('div');
+  d.className = 'leg-item';
+  const ls = dashPats[i].length
+    ? `border-top:2px dashed ${curveColors[i]};height:0;width:22px;`
+    : `border-top:2.5px solid ${curveColors[i]};height:0;width:22px;`;
+  d.innerHTML = `<div style="${ls}"></div><span>${c.a}</span>`;
+  legEl.appendChild(d);
+});
+const sep = document.createElement('div');
+sep.style.cssText = 'width:1px;height:14px;background:var(--border2);margin:0 4px;';
+legEl.appendChild(sep);
+opPoints.forEach(p => {
+  const b = document.createElement('div');
+  b.className = 'op-badge';
+  b.style.cssText = `color:${p.col};border-color:${p.col};background:${p.bg};`;
+  b.textContent = p.label;
+  legEl.appendChild(b);
+});
+
+// Bar chart
+new Chart(document.getElementById('barChart'), {
+  type:'bar',
+  data:{
+    labels:['Design','BMCR','NDC','40% NDC'],
+    datasets:[
+      { label:'Shaft Power (kW)', data:[6230,4571,4344,3225],
+        backgroundColor:['rgba(26,61,140,.18)','rgba(26,111,212,.18)','rgba(30,126,62,.18)','rgba(192,40,30,.18)'],
+        borderColor:['#1a3d8c','#1a6fd4','#1e7e3e','#c0281e'], borderWidth:1.5, yAxisID:'y1' },
+      { label:'Efficiency (%)', data:[83.0,69.5,67.1,51.8],
+        type:'line', borderColor:'#c47a10', backgroundColor:'rgba(196,122,16,.1)',
+        pointBackgroundColor:'#c47a10', pointRadius:5, borderWidth:2,
+        fill:false, yAxisID:'y2', tension:0.3 }
+    ]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false},
+      tooltip:{backgroundColor:'rgba(255,255,255,0.97)',borderColor:'#dde0e8',borderWidth:1,titleColor:'#1a1d26',bodyColor:'#50566a'} },
+    scales:{
+      x:{ ticks:{color:tickC,font:{size:10}}, grid:{color:gridC} },
+      y1:{ type:'linear', position:'left',  min:0, max:8000, ticks:{color:tickC,font:{size:10},stepSize:2000}, grid:{color:gridC},
+           title:{display:true,text:'kW',color:tickC,font:{size:10}} },
+      y2:{ type:'linear', position:'right', min:0, max:100,  ticks:{color:tickC,font:{size:10},stepSize:20},   grid:{display:false},
+           title:{display:true,text:'%', color:tickC,font:{size:10}} }
+    }
+  }
+});
+
+new Chart(document.getElementById('flowChart'), {
+  type:'bar',
+  data:{
+    labels:['Design','BMCR','NDC','40% NDC'],
+    datasets:[{
+      label:'m\u00b3/s', data:[553.2,453.6,433.4,237.3],
+      backgroundColor:['rgba(26,61,140,.20)','rgba(26,111,212,.20)','rgba(30,126,62,.20)','rgba(192,40,30,.20)'],
+      borderColor:['#1a3d8c','#1a6fd4','#1e7e3e','#c0281e'], borderWidth:1.5,
+    }]
+  },
+  options:{
+    responsive:true, maintainAspectRatio:false, indexAxis:'y',
+    plugins:{ legend:{display:false},
+      tooltip:{backgroundColor:'rgba(255,255,255,0.97)',borderColor:'#dde0e8',borderWidth:1,titleColor:'#1a1d26',bodyColor:'#50566a'} },
+    scales:{
+      x:{ min:0, max:620, ticks:{color:tickC,font:{size:10}}, grid:{color:gridC} },
+      y:{ ticks:{color:tickC,font:{size:10}}, grid:{display:false} }
+    }
+  }
+});
+
+// Load detail tabs
+const loads = [
+  { name:'Design Duty',  tagCls:'tag-blue',  vane:'-10°',
+    t1:138.0,t2:151.9,rho1:0.8207,qv1:553.2,qm:454.0,
+    ps1:-6021,ps2:3641,dP:9662,power:6230,eff:83.0,
+    compZ:0.968,v1:22.72,v2:22.94,
+    accol:'#1a3d8c',acbg:'rgba(26,61,140,0.06)' },
+  { name:'BMCR',         tagCls:'tag-ok',    vane:'~\u221220°',
+    t1:138.0,t2:150.2,rho1:0.8334,qv1:453.6,qm:378.0,
+    ps1:-4460,ps2:2697,dP:7157,power:4571,eff:69.5,
+    compZ:0.979,v1:18.63,v2:19.21,
+    accol:'#1a6fd4',acbg:'rgba(26,111,212,0.06)' },
+  { name:'NDC',          tagCls:'tag-amber', vane:'~\u221220°',
+    t1:138.0,t2:150.1,rho1:0.8330,qv1:433.4,qm:361.0,
+    ps1:-4170,ps2:2693,dP:6863,power:4344,eff:67.1,
+    compZ:0.980,v1:17.80,v2:18.41,
+    accol:'#1e7e3e',acbg:'rgba(30,126,62,0.06)' },
+  { name:'40% NDC',      tagCls:'tag-red',   vane:'~\u221270°',
+    t1:138.0,t2:154.5,rho1:0.8318,qv1:237.3,qm:197.4,
+    ps1:-4461,ps2:2696,dP:7157,power:3225,eff:51.8,
+    compZ:0.984,v1:9.75,v2:10.15,
+    accol:'#c0281e',acbg:'rgba(192,40,30,0.06)' },
+];
+
+function effBarColor(e) { return e>=75?'#1e7e3e': e>=62?'#c47a10':'#c0281e'; }
+function pwPct(p) { return (p/6853*100).toFixed(1); }
+
+function renderLoad(i) {
+  const d = loads[i];
+  document.getElementById('loadDetail').innerHTML = `
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);">
+    <span style="font-size:15px;font-weight:700;color:var(--text);">${d.name}</span>
+    <span class="tag ${d.tagCls}">${d.tagCls==='tag-blue'?'DESIGN':d.name.toUpperCase()}</span>
+    <span style="font-size:11px;color:var(--text3);">Vane angle: <strong style="color:var(--amber);">${d.vane}</strong></span>
+  </div>
+  <div class="detail-grid">
+    <div class="detail-card" style="background:${d.acbg};border-color:${d.accol}33;">
+      <div class="detail-card-label">Temperature</div>
+      <div>Inlet: <strong>${d.t1} °C</strong> &nbsp; Outlet: <strong>${d.t2} °C</strong></div>
+      <div style="color:var(--text3);font-size:10px;margin-top:3px;">&rho;&#x2081; = ${d.rho1} kg/m&sup3; &nbsp; Kz = ${d.compZ}</div>
+    </div>
+    <div class="detail-card">
+      <div class="detail-card-label">Flow Rate</div>
+      <div><strong>${d.qv1}</strong> m&sup3;/s (wet)</div>
+      <div style="color:var(--text3);font-size:10px;margin-top:3px;">${d.qm} kg/s &nbsp;·&nbsp; v&#x2081; = ${d.v1} m/s</div>
+    </div>
+    <div class="detail-card">
+      <div class="detail-card-label">Static Pressure</div>
+      <div>Inlet: <strong style="color:var(--red);">${d.ps1.toLocaleString()} Pa G</strong></div>
+      <div>Outlet: <strong style="color:var(--green);">+${d.ps2.toLocaleString()} Pa G</strong></div>
+      <div style="margin-top:3px;font-weight:700;color:var(--amber);">&Delta;P = ${d.dP.toLocaleString()} Pa</div>
+    </div>
+    <div class="detail-card">
+      <div class="detail-card-label">Power &amp; Velocity</div>
+      <div><strong>${d.power.toLocaleString()}</strong> kW shaft</div>
+      <div style="color:var(--text3);font-size:10px;margin-top:3px;">v&#x2082;' = ${d.v2} m/s</div>
+    </div>
+  </div>
+  <div class="bar-row">
+    <div class="bar-label"><span>Static rise efficiency</span><span style="font-weight:700;color:${effBarColor(d.eff)};">${d.eff}%</span></div>
+    <div class="bar-bg"><div class="bar-fill" style="width:${d.eff}%;background:${effBarColor(d.eff)};"></div></div>
+  </div>
+  <div class="bar-row">
+    <div class="bar-label"><span>Motor load</span><span style="font-weight:700;color:var(--blue);">${d.power.toLocaleString()} kW (${pwPct(d.power)}%)</span></div>
+    <div class="bar-bg"><div class="bar-fill" style="width:${pwPct(d.power)}%;background:var(--blue);"></div></div>
+  </div>`;
+}
+
+document.querySelectorAll('#loadTabs .load-tab').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('#loadTabs .load-tab').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    renderLoad(+this.dataset.i);
+  });
+});
+renderLoad(0);
+
+function updateTS() {
+  const now = new Date();
+  document.getElementById('tsDisplay').textContent =
+    'Last updated: ' + now.toLocaleDateString('en-GB') + ' ' + now.toLocaleTimeString('en-GB');
+}
+updateTS(); setInterval(updateTS, 10000);
+</script>
+</body>
+</html>

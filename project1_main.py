@@ -18,6 +18,8 @@ from project1_main_tab.plotly_tab import PlotlyTab
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QComboBox, QLabel, QHBoxLayout, QWidget, QSizePolicy
 from ML_TAB.tabs.ml_application_tab import MLApplicationTab
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtCore import QUrl
 
 
 def app_dir():
@@ -153,6 +155,7 @@ QPushButton:pressed {
         main_layout.addWidget(self.scroll_area, 1)
         main_layout.addWidget(self.tab_widget, 2)
         self.final_df = None
+        self.data_manager = None
 
     def show_folder_context_menu(self, pos):
         global_pos = self.scroll_content.mapToGlobal(pos)
@@ -163,12 +166,14 @@ QPushButton:pressed {
             filter_text = self.search_box.text()
             self.load_folders(filter_text)
 
-    def set_final_df(self, df, folder_name="MergedData"):
+    def set_final_df(self, df, folder_name="MergedData", data_manager=None):
         if not hasattr(self, "dataframes"):
             self.dataframes = {}
         self.dataframes[folder_name] = df
         self.final_df = df
         self.current_folder_name = folder_name
+        if data_manager is not None:
+            self.data_manager = data_manager
         if hasattr(self, "tab2"):
             self.tab2.update_variables(df)
         if hasattr(self, "drift_tab"):
@@ -179,6 +184,10 @@ QPushButton:pressed {
             self.analysis_report_tab.set_dataframe(df)
         if hasattr(self, "plotly_tab"):
             self.plotly_tab.update_plot(df)
+        # Inject vào Monitoring nếu HTML đang hiển thị đúng folder
+        folder = getattr(self, "_current_monitoring_folder", None)
+        if folder and folder == folder_name and folder in self.MONITORING_COL_MAP:
+            self._inject_monitoring_data(folder)
 
     def get_current_df_for_ml(self):
         """
@@ -186,6 +195,10 @@ QPushButton:pressed {
         Ở đây dùng final_df (dữ liệu đã xử lý ở Tab1).
         """
         return getattr(self, "final_df", None)
+
+    def get_data_manager(self):
+        """Trả về DataManager để query dữ liệu lớn theo time range / column selection."""
+        return getattr(self, "data_manager", None)
 
 
 
@@ -228,6 +241,12 @@ QPushButton:pressed {
             ".git",
             ".idea",
             ".vscode",
+            "_internal",
+            "build",
+            "dist",
+            "logs",
+            "Temp",
+            "csv_archive",
         }
 
         base_path = app_dir()
@@ -274,12 +293,109 @@ QPushButton:pressed {
             self.scroll_layout.addStretch()
 
 
+    # Mapping cột DataFrame → thứ tự mảng D cho từng HTML
+    # Thêm folder mới vào đây khi có HTML tương ứng
+    MONITORING_COL_MAP = {
+        "AH_U2": [
+            "NET MW", "ECO O/L FG TEMP", "AH O/L FG TEMP",
+            "AH I/L PA TEMP", "AH O/L PA TEMP",
+            "AH I/L SECAIR TEMP", "AH O/L SECAIR TEMP",
+            "ECO O/L FG ANALR 1 PRB O2 DNSTY 1 VLU",
+            "ECO O/L FG ANALR 1 PRB O2 DNSTY 2 VLU",
+            "ECO O/L FG ANALR 2 PRB O2 DNSTY 1 VLU",
+            "ECO O/L FG ANALR 2 PRB O2 DNSTY 2 VLU",
+            "AH RTDRV CURR", "AH GDBRG TEMP", "AH SPT BRG TEMP",
+            "AH SECAIR BYP CDPR CDRV POSN FDBK",
+            "ECO O/L FG PRS", "AH O/L FG PRS",
+            "PAF A O/L AIR PRS", "PAF B O/L AIR PRS",
+            "HPA PRS SETP BIAS PV",
+            "FDF A O/L AIR PRS", "FDF B O/L AIR PRS",
+            "AH O/L SECAIR PRS",
+            "AH SOOTBLOWER HOT SIDE RETRACTED",
+            "AH SOOTBLOWER COLD SIDE RETRACTED",
+        ],
+    }
+
     def open_folder(self, folder_name):
         folder_path = app_dir() / folder_name
         if hasattr(self, "csv_cleaner_widget"):
             self.csv_cleaner_widget._external_folder = str(folder_path)
             self.csv_cleaner_widget.select_and_process_files()
             self.tab_widget.setCurrentIndex(0)
+        self._current_monitoring_folder = folder_name
+        self._load_monitoring_for_folder(folder_name)
+
+    def _load_monitoring_placeholder(self):
+        html = """
+        <html><body style="margin:0;display:flex;align-items:center;justify-content:center;
+                           height:100vh;background:#1a1c29;color:#4a4e6a;font-family:sans-serif;">
+            <div style="text-align:center">
+                <div style="font-size:48px;margin-bottom:16px">📡</div>
+                <div style="font-size:16px">Chọn folder dữ liệu để hiển thị giao diện giám sát</div>
+            </div>
+        </body></html>
+        """
+        self.monitoring_web_view.setHtml(html)
+
+    def _load_monitoring_for_folder(self, folder_name):
+        if not hasattr(self, "monitoring_web_view"):
+            return
+        html_path = app_dir() / "Systems" / f"{folder_name}.html"
+        if html_path.exists():
+            # Ngắt kết nối signal cũ nếu có
+            try:
+                self.monitoring_web_view.loadFinished.disconnect()
+            except RuntimeError:
+                pass
+            # Kết nối inject data sau khi HTML load xong
+            if folder_name in self.MONITORING_COL_MAP:
+                self.monitoring_web_view.loadFinished.connect(
+                    lambda *_, fn=folder_name: self._inject_monitoring_data(fn)
+                )
+            self.monitoring_web_view.load(QUrl.fromLocalFile(str(html_path.resolve())))
+        else:
+            html = f"""
+            <html><body style="margin:0;display:flex;align-items:center;justify-content:center;
+                               height:100vh;background:#1a1c29;color:#4a4e6a;font-family:sans-serif;">
+                <div style="text-align:center">
+                    <div style="font-size:48px;margin-bottom:16px">📡</div>
+                    <div style="font-size:16px">Chưa có giao diện giám sát cho <b style="color:#8c5eff">{folder_name}</b></div>
+                    <div style="font-size:12px;margin-top:8px;color:#333">
+                        Tạo file: <code style="color:#00bcd4">Systems/{folder_name}.html</code>
+                    </div>
+                </div>
+            </body></html>
+            """
+            self.monitoring_web_view.setHtml(html)
+
+    def _inject_monitoring_data(self, folder_name):
+        """Chuyển DataFrame → mảng D rồi gọi onDataReady() trong HTML."""
+        import json
+        import math
+
+        df = getattr(self, "final_df", None)
+        if df is None or df.empty:
+            return
+        cols = self.MONITORING_COL_MAP.get(folder_name)
+        if not cols:
+            return
+
+        rows = []
+        for _, row in df.iterrows():
+            dt_str = str(row["Datetime"])[:19]  # "YYYY-MM-DD HH:MM:SS"
+            r = [dt_str]
+            for col in cols:
+                val = row.get(col, 0)
+                try:
+                    v = float(val)
+                    r.append(0 if math.isnan(v) else round(v, 3))
+                except (TypeError, ValueError):
+                    r.append(0)
+            rows.append(r)
+
+        data_json = json.dumps(rows)
+        js = f"if(typeof onDataReady==='function') onDataReady({data_json});"
+        self.monitoring_web_view.page().runJavaScript(js)
 
     def add_tabs(self):
         tab1 = QWidget()
@@ -287,8 +403,19 @@ QPushButton:pressed {
         layout1.setContentsMargins(0, 0, 0, 0)
         layout1.setSpacing(0)
 
+        # Inner tab widget bên trong Home
+        self.inner_tab_widget = QTabWidget()
+
+        # Tab con 1: Draw Data - chứa bảng dữ liệu thô
         self.csv_cleaner_widget = CsvCleanerWidget(parent_main_window=self)
-        layout1.addWidget(self.csv_cleaner_widget)
+        self.inner_tab_widget.addTab(self.csv_cleaner_widget, "📋 Draw Data")
+
+        # Tab con 2: Monitoring - WebView hiển thị HTML hệ thống
+        self.monitoring_web_view = QWebEngineView()
+        self._load_monitoring_placeholder()
+        self.inner_tab_widget.addTab(self.monitoring_web_view, "📡 Monitoring")
+
+        layout1.addWidget(self.inner_tab_widget)
         self.tab_widget.addTab(tab1, "🏠 Home")
 
         # Tab 2 - Plot

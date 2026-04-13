@@ -20,6 +20,9 @@ venv/
 .vscode/
 .idea/
 
+# Claude Code local settings (chứa permissions cục bộ)
+.claude/settings.local.json
+
 # Temporary data
 *.db
 *.csv
@@ -94,3 +97,10 @@ kaleido/
 *.jpg
 Monitoring storage/
 *.html
+# Ngoại lệ: HTML dashboard source files trong Systems/ cần được track
+!Systems/*.html
+
+# Data folders (parquet + metadata) — không commit, quản lý riêng
+AH_U2/
+athuy/
+athuy2/

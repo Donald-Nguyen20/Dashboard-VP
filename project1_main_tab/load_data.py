@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QTableView
 from PySide6.QtCore import QAbstractTableModel, Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from project1_main_tab.Load_data_modules.nan_status_dialog import NaNStatusDialog
+from project1_main_tab.Load_data_modules.data_manager import DataManager
 
 
 class CsvCleanerWidget(QWidget):
@@ -183,9 +184,10 @@ class CsvCleanerWidget(QWidget):
 
 
     def select_and_process_files(self):
+        import json
         from datetime import datetime
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         from project1_main_tab.load_data import PreviewWidget
-        import sqlite3
 
         folder_path = getattr(self, "_external_folder", None)
         if not folder_path:
@@ -198,101 +200,119 @@ class CsvCleanerWidget(QWidget):
 
         root_folder = Path(folder_path)
         folder_name = root_folder.name
-        sqlite_path = root_folder / f"{folder_name}.db"
+        parquet_dir = root_folder / "parquet_data"
+        parquet_dir.mkdir(exist_ok=True)
+        metadata_path = root_folder / "metadata.json"
 
-        conn = sqlite3.connect(sqlite_path)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS metadata (
-                folder_name TEXT PRIMARY KEY,
-                processed_time TEXT
-            )
-        """)
-
-        try:
-            existing_folders = set(row[0] for row in conn.execute("SELECT folder_name FROM metadata"))
-        except:
+        # Đọc metadata — thay thế SQLite metadata table
+        if metadata_path.exists():
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                existing_folders = set(json.load(f).get("folders", []))
+        else:
             existing_folders = set()
 
-        all_dfs = []
-        folder_count = 0
+        dayfirst, fmt = self._get_date_parse_params()
         processed_folders = []
 
-        for subfolder in sorted(root_folder.iterdir()):
-            if subfolder.is_dir() and subfolder.name not in existing_folders:
-                folder_count += 1
-                file_paths = sorted([
-                    f for f in subfolder.glob("*") if f.suffix.lower() in [".csv", ".xlsm", ".xlsx", ".xlsb"]
-                ])
+        def process_one_subfolder(subfolder: Path) -> str | None:
+            """Đọc CSV/Excel trong subfolder → merge → ghi Parquet. Trả về tên subfolder nếu thành công."""
+            file_paths = sorted([
+                f for f in subfolder.glob("*")
+                if f.suffix.lower() in [".csv", ".xlsm", ".xlsx", ".xlsb"]
+            ])
+            if not file_paths:
+                return None
 
-                dfs = []
-                for filepath in file_paths:
-                    try:
-                        df = self.read_flexible_description_csv(filepath)
-                        df = df.drop(columns=["SourceFile"], errors="ignore")
-                        dfs.append(df)
-                    except Exception as e:
-                        print(f"❌ Lỗi xử lý file {filepath.name} trong {subfolder.name}: {e}")
+            dfs = []
+            for filepath in file_paths:
+                try:
+                    df = self.read_flexible_description_csv(filepath)
+                    df = df.drop(columns=["SourceFile"], errors="ignore")
+                    dfs.append(df)
+                except Exception as e:
+                    print(f"❌ Lỗi file {filepath.name} trong {subfolder.name}: {e}")
 
-                if dfs:
-                    merged_df = dfs[0]
-                    for df in dfs[1:]:
-                        df = df.drop(columns=["SourceFile"], errors="ignore")
-                        merged_df = pd.merge(merged_df, df, on=["Date", "Time"], how="outer")
+            if not dfs:
+                return None
 
-                    if 'Datetime' not in merged_df.columns:
-                        # Lấy dayfirst & format từ combobox Date format
-                        dayfirst, fmt = self._get_date_parse_params()
+            merged_df = dfs[0]
+            for df in dfs[1:]:
+                df = df.drop(columns=["SourceFile"], errors="ignore")
+                merged_df = pd.merge(merged_df, df, on=["Date", "Time"], how="outer")
 
-                        merged_df['Datetime'] = pd.to_datetime(
-                            merged_df['Date'].astype(str).str.strip() + ' ' + merged_df['Time'].astype(str).str.strip(),
-                            dayfirst=dayfirst,
-                            format=fmt,
-                            errors='coerce'
-                        )
+            if "Datetime" not in merged_df.columns:
+                merged_df["Datetime"] = pd.to_datetime(
+                    merged_df["Date"].astype(str).str.strip()
+                    + " "
+                    + merged_df["Time"].astype(str).str.strip(),
+                    dayfirst=dayfirst,
+                    format=fmt,
+                    errors="coerce",
+                )
 
+            merged_df["__SourceFolder__"] = subfolder.name
+            merged_df.columns = [col.split(" [")[0] if " [" in col else col for col in merged_df.columns]
+            merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
+            merged_df = merged_df.dropna(subset=["Datetime"])
+            merged_df = merged_df.sort_values(by="Datetime")
+            merged_df = merged_df.drop(columns=["Date", "Time"], errors="ignore")
 
-                    # 🏷️ Gắn cột SourceFolder riêng biệt để tránh trùng
-                    merged_df["__SourceFolder__"] = subfolder.name
+            # Ghi Parquet — nhanh hơn to_sql 10-50x, giữ đúng kiểu dữ liệu
+            parquet_path = parquet_dir / f"{subfolder.name}.parquet"
+            merged_df.to_parquet(parquet_path, compression="zstd", index=False)
+            print(f"  ✅ {subfolder.name}: {len(merged_df):,} dòng")
+            return subfolder.name
 
-                    # ✔️ Làm sạch và chuẩn hoá
-                    merged_df.columns = [col.split(" [")[0] if " [" in col else col for col in merged_df.columns]
-                    merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
-                    merged_df = merged_df.dropna(subset=["Datetime"])
-                    merged_df = merged_df.sort_values(by="Datetime")
+        # Xử lý song song các subfolder chưa được xử lý
+        subfolders_to_process = [
+            s for s in sorted(root_folder.iterdir())
+            if s.is_dir()
+            and s.name not in existing_folders
+            and s.name != "parquet_data"
+        ]
 
-                    # Loại các cột không cần lưu
-                    merged_df = merged_df.drop(columns=["Date", "Time"], errors="ignore")
+        if subfolders_to_process:
+            print(f"\n⚙️  Xử lý {len(subfolders_to_process)} subfolder mới...")
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = {executor.submit(process_one_subfolder, s): s for s in subfolders_to_process}
+                for future in as_completed(futures):
+                    result = future.result()
+                    if result:
+                        processed_folders.append(result)
 
-                    # Ghi vào SQL
-                    merged_df.to_sql("data", conn, if_exists="append", index=False)
+            # Cập nhật metadata JSON
+            all_folders = list(existing_folders | set(processed_folders))
+            with open(metadata_path, "w", encoding="utf-8") as f:
+                json.dump({"folders": all_folders, "updated": datetime.now().isoformat()}, f, indent=2)
 
-                    conn.execute(
-                        "INSERT OR REPLACE INTO metadata (folder_name, processed_time) VALUES (?, ?)",
-                        (subfolder.name, datetime.now().isoformat())
-                    )
+        # Đọc tất cả Parquet → final_df (giống SELECT * FROM data trước đây)
+        parquet_files = sorted(parquet_dir.glob("*.parquet"))
+        if not parquet_files:
+            QMessageBox.warning(self, "Không có dữ liệu", "Không tìm thấy dữ liệu. Kiểm tra lại thư mục.")
+            return
 
-                    processed_folders.append(subfolder.name)
+        # Khởi tạo DataManager — query engine cho dữ liệu lớn (không load hết vào RAM)
+        data_manager = DataManager(parquet_dir)
 
-        conn.commit()
-        final_df = pd.read_sql_query("SELECT * FROM data", conn, parse_dates=["Datetime"])
-        conn.close()
+        print(f"\n📖 Đọc {len(parquet_files)} file Parquet...")
+        final_df = pd.read_parquet(parquet_dir)  # đọc toàn bộ thư mục parquet_data/
 
         if final_df.empty:
-            QMessageBox.warning(self, "Không có dữ liệu", "Không tìm thấy dữ liệu trong SQLite hoặc folder mới.")
+            QMessageBox.warning(self, "Không có dữ liệu", "Không tìm thấy dữ liệu trong Parquet.")
             return
 
         final_df = final_df.sort_values(by="Datetime")
         final_df.columns = [col.split(" [")[0] if " [" in col else col for col in final_df.columns]
         final_df = final_df.loc[:, ~final_df.columns.duplicated()]
-        cols = ['Datetime'] + [col for col in final_df.columns if col not in ['Datetime']]
+        cols = ["Datetime"] + [col for col in final_df.columns if col not in ["Datetime"]]
         final_df = final_df[cols]
 
-        # 📂 Ghi CSV
+        # 📂 Ghi CSV backup
         output_file = root_folder / f"{folder_name}.csv"
         final_df.to_csv(output_file, index=False)
 
         if self.parent_main_window:
-            self.parent_main_window.set_final_df(final_df, folder_name=folder_name)
+            self.parent_main_window.set_final_df(final_df, folder_name=folder_name, data_manager=data_manager)
             self.parent_main_window.final_df = final_df
 
         self.df = final_df
@@ -310,8 +330,8 @@ class CsvCleanerWidget(QWidget):
         self.preview_widget = widget
         self.layout().addWidget(self.preview_widget)
 
-        print(f"\n📁 Đã xử lý {folder_count} thư mục mới. Đã thêm: {processed_folders}")
-        print(f"📆 Tổng {len(final_df)} dòng dữ liệu trong: {sqlite_path.name}")
+        print(f"\n📁 Xử lý xong {len(processed_folders)} subfolder mới: {processed_folders}")
+        print(f"📆 Tổng {len(final_df):,} dòng | {len(parquet_files)} file Parquet trong {parquet_dir.name}/")
 
 
 class PandasModel(QAbstractTableModel):

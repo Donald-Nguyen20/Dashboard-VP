@@ -4,9 +4,11 @@ import sys
 import os
 from pathlib import Path
 from PySide6.QtWidgets import QApplication, QMainWindow, QTabWidget, QPushButton
+from PySide6.QtGui import QKeySequence, QShortcut
 from project1_main import MainWindow
 from ML_TAB.windows.ML_tab import ML_Tab
 from Monitoring.windows.monitoring_tab import Monitoring_Tab
+from help_dialog import HelpDialog
 
 
 def app_dir():
@@ -520,6 +522,13 @@ class MasterWindow(QMainWindow):
         )
         monitoring_widget = monitoring_win.centralWidget()
         self.tab_widget.addTab(monitoring_widget, "📡 Monitoring System")
+
+        # Phím F1 mở hướng dẫn sử dụng
+        QShortcut(QKeySequence("F1"), self, activated=self._open_help)
+
+    def _open_help(self):
+        dlg = HelpDialog(self)
+        dlg.exec()
 
     def add_new_project_tab(self):
         main_window = MainWindow()
