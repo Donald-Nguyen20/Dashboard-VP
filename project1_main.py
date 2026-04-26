@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QComboBox, QLabel, QHBoxLayout, QWidget, QSizePoli
 from ML_TAB.tabs.ml_application_tab import MLApplicationTab
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtCore import QUrl
+from LtdViewerPy.main import MainWindow as LtdViewerWindow
 
 
 def app_dir():
@@ -109,6 +110,13 @@ QPushButton:pressed {
         """)
         self.btn_load_data.clicked.connect(self.load_data_clicked)
         self.scroll_layout.addWidget(self.btn_load_data)
+
+        self.btn_load_ltdt = QPushButton("📟 Load LTDT")
+        self.btn_load_ltdt.setFixedHeight(36)
+        self.btn_load_ltdt.setMaximumWidth(150)
+        self.btn_load_ltdt.setStyleSheet(self.btn_load_data.styleSheet())
+        self.btn_load_ltdt.clicked.connect(self.on_load_ltdt_clicked)
+        self.scroll_layout.addWidget(self.btn_load_ltdt)
 
         # === Date format combobox - ngay dưới nút Load Data ===
         date_row = QWidget(self.scroll_content)
@@ -221,6 +229,12 @@ QPushButton:pressed {
             self.csv_cleaner_widget.select_and_process_files_from_filelist()
             self.tab_widget.setCurrentIndex(0)
 
+    def on_load_ltdt_clicked(self):
+        if not hasattr(self, '_ltd_win') or not self._ltd_win.isVisible():
+            self._ltd_win = LtdViewerWindow()
+        self._ltd_win.show()
+        self._ltd_win.raise_()
+
     def on_search_folder(self, text):
         self.load_folders(filter_text=text)
 
@@ -314,6 +328,7 @@ QPushButton:pressed {
             "AH SOOTBLOWER HOT SIDE RETRACTED",
             "AH SOOTBLOWER COLD SIDE RETRACTED",
         ],
+        "U2-Main_Turbine": [],
     }
 
     def open_folder(self, folder_name):

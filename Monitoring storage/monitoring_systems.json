@@ -107,19 +107,37 @@
               "cell_id": "ab1b8550",
               "row": 0,
               "col": 0,
-              "type": "echarts",
-              "echarts_config": {
-                "chart_type": "line",
-                "title": "",
+              "type": "note",
+              "text_content": ""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "66056a00",
+      "name": "zx",
+      "created_at": "",
+      "config": {
+        "layout": {
+          "row_cols": [
+            1
+          ],
+          "cells": [
+            {
+              "cell_id": "7ed97292",
+              "row": 0,
+              "col": 0,
+              "type": "plotly_spec",
+              "plotly_spec": {
+                "chart_type": "Line",
                 "selected_vars": [
                   "NET MW",
                   "ECO O/L FG TEMP",
                   "AH O/L FG TEMP",
-                  "AH I/L PA TEMP",
-                  "AH O/L PA TEMP",
-                  "AH I/L SECAIR TEMP"
+                  "AH I/L PA TEMP"
                 ],
-                "smooth": true
+                "range_spin": 1
               }
             }
           ]
