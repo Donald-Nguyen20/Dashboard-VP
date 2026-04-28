@@ -18,6 +18,8 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pandas as pd
+
 from PySide6.QtCore import Qt, QDateTime, Signal, QObject
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -28,7 +30,7 @@ from PySide6.QtWidgets import (
 
 from .dsh_reader import DshFile, TrendFolderReader, TagInfo
 from .csv_exporter import (
-    SAMPLING_RATES_SEC, ExportRequest, export_trend_csv,
+    SAMPLING_RATES_SEC, ExportRequest, export_trend_csv, build_dataframe,
 )
 
 
@@ -67,8 +69,9 @@ class ExportWorker(QObject):
 
 # --- main window ----------------------------------------------------------
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, parent_main_window=None):
         super().__init__()
+        self._parent_main_window = parent_main_window
         self.setWindowTitle("LtdViewerPy – DSH → CSV")
         self.resize(1024, 720)
         self._folder: TrendFolderReader | None = None
@@ -140,34 +143,37 @@ class MainWindow(QMainWindow):
         self.dt_to.setTimeSpec(Qt.UTC)
         grid.addWidget(self.dt_to, 0, 3)
 
-        grid.addWidget(QLabel("Sampling:"), 1, 0)
+        grid.addWidget(QLabel("Sampling:"), 0, 4)
         self.cb_sampling = QComboBox()
         for k in SAMPLING_RATES_SEC.keys():
             self.cb_sampling.addItem(k)
         self.cb_sampling.setCurrentText("10sec")
-        grid.addWidget(self.cb_sampling, 1, 1)
+        grid.addWidget(self.cb_sampling, 0, 5)
 
-        grid.addWidget(QLabel("Group name:"), 1, 2)
+        grid.addWidget(QLabel("Group name:"), 0, 6)
         self.ed_group = QLineEdit("Group1")
-        grid.addWidget(self.ed_group, 1, 3)
+        grid.addWidget(self.ed_group, 0, 7)
 
-        grid.addWidget(QLabel("Save to:"), 2, 0)
+        grid.addWidget(QLabel("Save to:"), 1, 0)
         self.ed_save = QLineEdit()
-        grid.addWidget(self.ed_save, 2, 1, 1, 2)
+        grid.addWidget(self.ed_save, 1, 1, 1, 5)
         btn_save_browse = QPushButton("Browse…")
         btn_save_browse.clicked.connect(self.on_browse_save)
-        grid.addWidget(btn_save_browse, 2, 3)
+        grid.addWidget(btn_save_browse, 1, 6)
+        self.btn_export = QPushButton("Export CSV")
+        self.btn_export.clicked.connect(self.on_export)
+        grid.addWidget(self.btn_export, 1, 7)
 
         layout.addLayout(grid)
 
-        # --- Run row ---
+        # --- Progress row ---
         run_row = QHBoxLayout()
-        self.btn_export = QPushButton("Export CSV")
-        self.btn_export.clicked.connect(self.on_export)
-        run_row.addWidget(self.btn_export)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         run_row.addWidget(self.progress_bar, 1)
+        self.btn_create_df = QPushButton("Create DF")
+        self.btn_create_df.clicked.connect(self.on_create_df_clicked)
+        run_row.addWidget(self.btn_create_df)
         layout.addLayout(run_row)
 
         self.lbl_status = QLabel("Sẵn sàng.")
@@ -322,6 +328,60 @@ class MainWindow(QMainWindow):
             self.lbl_status.setText(f"Xuất CSV thành công: {rows} dòng dữ liệu.")
             QMessageBox.information(self, "CSV export succeeded",
                                     f"Đã ghi {rows} dòng dữ liệu vào file.")
+
+    def on_create_df_clicked(self):
+        if self._folder is None:
+            QMessageBox.warning(self, "Chưa chọn folder", "Hãy chọn thư mục TREND trước.")
+            return
+        tags = self._selected_tags()
+        if not tags:
+            QMessageBox.warning(self, "Chưa chọn tag", "Hãy tick ít nhất 1 tag.")
+            return
+        start = qdt_to_utc(self.dt_from.dateTime())
+        end = qdt_to_utc(self.dt_to.dateTime())
+        if end <= start:
+            QMessageBox.warning(self, "Khoảng thời gian sai", "To phải lớn hơn From.")
+            return
+        sampling = SAMPLING_RATES_SEC[self.cb_sampling.currentText()]
+
+        req = ExportRequest(
+            output_path=Path("."),
+            group_name=self.ed_group.text() or "Group1",
+            start=start, end=end,
+            sampling_sec=sampling,
+            tags=tags,
+        )
+        try:
+            df = build_dataframe(req, self._folder)
+
+            # Chuyển Datetime UTC-aware → UTC+7 naive (khớp pipeline final_df)
+            df = df.copy()
+            df["Datetime"] = (
+                df["Datetime"]
+                .dt.tz_convert("Asia/Ho_Chi_Minh")
+                .dt.tz_localize(None)
+            )
+            self.LTDT_dataframe = df
+
+            # Đẩy vào pipeline
+            pmw = self._parent_main_window
+            if pmw is not None and hasattr(pmw, "set_final_df"):
+                existing = getattr(pmw, "final_df", None)
+                if existing is not None and not existing.empty:
+                    merged = pd.merge(existing, df, on="Datetime", how="outer")
+                    merged = merged.sort_values("Datetime").reset_index(drop=True)
+                    pmw.set_final_df(merged, folder_name="LTDT_merged")
+                    status = f"Đã merge vào final_df: {len(merged)} hàng × {len(merged.columns)} cột"
+                else:
+                    pmw.set_final_df(df, folder_name="LTDT")
+                    status = f"Đã set final_df từ LTDT: {len(df)} hàng × {len(df.columns)} cột"
+            else:
+                status = f"LTDT_dataframe: {len(df)} hàng × {len(df.columns)} cột (chưa kết nối pipeline)"
+
+            self.lbl_status.setText(status)
+            QMessageBox.information(self, "Tạo DataFrame thành công", status)
+        except Exception as e:
+            QMessageBox.critical(self, "Lỗi tạo DataFrame", f"{e}\n\n{traceback.format_exc()}")
 
     def on_inspect(self):
         p, _ = QFileDialog.getOpenFileName(self, "Mở DSH", "", "DSH files (*.DSH *.dsh)")

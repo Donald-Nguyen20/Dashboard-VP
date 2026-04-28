@@ -192,6 +192,17 @@ QPushButton:pressed {
             self.analysis_report_tab.set_dataframe(df)
         if hasattr(self, "plotly_tab"):
             self.plotly_tab.update_plot(df)
+        if hasattr(self, "csv_cleaner_widget"):
+            from project1_main_tab.load_data import PreviewWidget
+            pw = getattr(self.csv_cleaner_widget, "preview_widget", None)
+            if pw is not None:
+                pw.df_full = df
+                pw.update_table()
+            else:
+                widget = PreviewWidget(df, self.csv_cleaner_widget)
+                widget.df_full = df
+                self.csv_cleaner_widget.preview_widget = widget
+                self.csv_cleaner_widget.layout().addWidget(widget)
         # Inject vào Monitoring nếu HTML đang hiển thị đúng folder
         folder = getattr(self, "_current_monitoring_folder", None)
         if folder and folder == folder_name and folder in self.MONITORING_COL_MAP:
@@ -231,7 +242,7 @@ QPushButton:pressed {
 
     def on_load_ltdt_clicked(self):
         if not hasattr(self, '_ltd_win') or not self._ltd_win.isVisible():
-            self._ltd_win = LtdViewerWindow()
+            self._ltd_win = LtdViewerWindow(parent_main_window=self)
         self._ltd_win.show()
         self._ltd_win.raise_()
 
@@ -239,8 +250,8 @@ QPushButton:pressed {
         self.load_folders(filter_text=text)
 
     def load_folders(self, filter_text=""):
-        # Xóa các widget cũ (trừ ô tìm kiếm + nút Load Data + date_row)
-        for i in reversed(range(3, self.scroll_layout.count())):
+        # Xóa các widget cũ (trừ ô tìm kiếm + btn_load_data + btn_load_ltdt + date_row)
+        for i in reversed(range(4, self.scroll_layout.count())):
             item = self.scroll_layout.itemAt(i)
             w = item.widget()
             if w is not None:

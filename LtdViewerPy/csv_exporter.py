@@ -14,11 +14,14 @@ Xuất dữ liệu Trend ra file CSV với cấu trúc tương đương LtdViewe
 
 from __future__ import annotations
 
+import bisect
 import csv
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional, Sequence
+
+import pandas as pd
 
 from .dsh_reader import (
     DshFile, Record, TagInfo, TrendFolderReader,
@@ -68,15 +71,22 @@ def _collect_samples(
     end: datetime,
     *,
     progress: Optional[Callable[[float], None]] = None,
-) -> tuple[dict[str, dict[int, Record]], dict[str, TagInfo]]:
-    samples: dict[str, dict[int, Record]] = {tn: {} for tn in tag_names}
+) -> tuple[dict[str, list[int]], dict[str, list[Record]], dict[str, TagInfo]]:
+    """Quét records cho mỗi tag, trả về 2 list song song đã sort theo unix_time.
+
+    Returns (sample_times, sample_records, tag_meta) — sample_times[tag] và
+    sample_records[tag] cùng chiều dài, sort tăng dần theo unix_time. Để hỗ trợ
+    forward-fill ở mốc lưới đầu tiên, KHÔNG filter records theo start_unix; chỉ
+    cắt ở end_unix để tránh load đuôi file vô ích.
+    """
+    sample_times: dict[str, list[int]] = {tn: [] for tn in tag_names}
+    sample_records: dict[str, list[Record]] = {tn: [] for tn in tag_names}
     tag_meta: dict[str, TagInfo] = {}
 
     files = folder.files_in_range(start, end)
     if not files:
-        return samples, tag_meta
+        return sample_times, sample_records, tag_meta
 
-    start_unix = int(start.timestamp())
     end_unix = int(end.timestamp())
 
     for fi, fpath in enumerate(files):
@@ -91,18 +101,54 @@ def _collect_samples(
                     continue
                 if tag.tag_name not in tag_meta:
                     tag_meta[tag.tag_name] = tag
-                bucket = samples[tag.tag_name]
+                tlist = sample_times[tag.tag_name]
+                rlist = sample_records[tag.tag_name]
                 for rec in dsh.iter_records_for_tag(
-                    tag, start_unix=start_unix, end_unix=end_unix
+                    tag, start_unix=None, end_unix=end_unix
                 ):
-                    bucket[rec.unix_time] = rec
+                    tlist.append(rec.unix_time)
+                    rlist.append(rec)
         finally:
             dsh.close()
 
         if progress:
             progress((fi + 1) / len(files))
 
-    return samples, tag_meta
+    # Sort lại defensively: TrendFolderReader đã trả file theo thứ tự thời gian,
+    # và records trong từng file vốn đã sort, nên ts_list thường đã sort. Tuy
+    # nhiên record ở đường biên (vd 16:00:00 có ở cả file 15:00 và 16:00) có
+    # thể trùng unix_time -> stable sort giữ thứ tự (file sau ghi đè file
+    # trước khi lookup vì bisect_right trả index lớn nhất với ts <= mốc).
+    for tn in tag_names:
+        ts_list = sample_times[tn]
+        if len(ts_list) <= 1:
+            continue
+        order = sorted(range(len(ts_list)), key=lambda i: ts_list[i])
+        sample_times[tn] = [ts_list[i] for i in order]
+        sample_records[tn] = [sample_records[tn][i] for i in order]
+
+    return sample_times, sample_records, tag_meta
+
+
+def _lookup_record(
+    sample_times: dict[str, list[int]],
+    sample_records: dict[str, list[Record]],
+    tag: str,
+    ts: int,
+) -> Optional[Record]:
+    """Trả về record có unix_time lớn nhất nhưng <= ts (forward-fill).
+
+    Đây là semantic "instant value" của LtdViewer gốc: tại mốc lưới ts, lấy
+    giá trị mới nhất đã được ghi cho tới thời điểm đó. Trả None nếu chưa có
+    record nào tới mốc đó.
+    """
+    arr = sample_times.get(tag)
+    if not arr:
+        return None
+    i = bisect.bisect_right(arr, ts) - 1
+    if i < 0:
+        return None
+    return sample_records[tag][i]
 
 
 def _resample_grid(start: datetime, end: datetime, step_sec: int) -> list[int]:
@@ -117,7 +163,7 @@ def export_trend_csv(
     *,
     progress: Optional[Callable[[float], None]] = None,
 ) -> int:
-    samples, meta = _collect_samples(
+    sample_times, sample_records, meta = _collect_samples(
         folder, request.tags, request.start, request.end, progress=progress
     )
 
@@ -146,7 +192,7 @@ def export_trend_csv(
             time_str = row_dt.strftime("%H:%M:%S")
             row = [date_str, time_str]
             for tag in request.tags:
-                rec = samples.get(tag, {}).get(ts)
+                rec = _lookup_record(sample_times, sample_records, tag, ts)
                 if rec is None or not rec.is_valid:
                     row.append("")
                 else:
@@ -162,7 +208,38 @@ def export_trend_csv(
     return rows_written
 
 
+def build_dataframe(
+    request: ExportRequest,
+    folder: TrendFolderReader,
+    *,
+    progress: Optional[Callable[[float], None]] = None,
+) -> pd.DataFrame:
+    sample_times, sample_records, meta = _collect_samples(
+        folder, request.tags, request.start, request.end, progress=progress
+    )
+    grid = _resample_grid(request.start, request.end, request.sampling_sec)
+
+    rows = []
+    for ts in grid:
+        row: dict = {"Datetime": datetime.fromtimestamp(ts, tz=timezone.utc)}
+        for tag in request.tags:
+            rec = _lookup_record(sample_times, sample_records, tag, ts)
+            row[tag] = rec.value if (rec is not None and rec.is_valid) else None
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+
+    # Đổi tên cột từ tag name → description (khớp với header CSV)
+    rename_map = {tag: meta[tag].description for tag in request.tags if tag in meta and meta[tag].description}
+    df = df.rename(columns=rename_map)
+
+    for col in df.columns[1:]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    return df
+
+
 __all__ = [
     "SAMPLING_RATES_SEC", "END_OF_DATA_MARKER",
-    "ExportRequest", "export_trend_csv",
+    "ExportRequest", "export_trend_csv", "build_dataframe",
 ]
