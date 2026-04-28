@@ -101,6 +101,7 @@ Monitoring storage/
 !Systems/*.html
 
 # Data folders (parquet + metadata) — không commit, quản lý riêng
+*.parquet
 AH_U2/
 athuy/
 athuy2/
