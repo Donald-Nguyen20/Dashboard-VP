@@ -105,3 +105,16 @@ Monitoring storage/
 AH_U2/
 athuy/
 athuy2/
+
+# =============== LtdViewerPy ===============
+
+# DSH binary data files (TOSMAP-HMI historical trend)
+*.DSH
+*.dsh
+
+# TREND data folders — chứa file DSH lớn, quản lý ngoài git
+LtdViewerPy/TREND/
+TREND/
+
+# Exported CSV test outputs
+LtdViewerPy/trend*.csv
