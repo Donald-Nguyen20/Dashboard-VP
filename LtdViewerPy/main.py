@@ -18,8 +18,6 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pandas as pd
-
 from PySide6.QtCore import Qt, QDateTime, Signal, QObject
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -67,6 +65,28 @@ class ExportWorker(QObject):
             self.finished.emit(0, f"{e}\n\n{traceback.format_exc()}")
 
 
+# --- create-df worker -----------------------------------------------------
+class CreateDFWorker(QObject):
+    progress = Signal(float)
+    finished = Signal(object, str)  # df | None, error_msg
+
+    def __init__(self, request: ExportRequest, folder: TrendFolderReader):
+        super().__init__()
+        self._req = request
+        self._folder = folder
+
+    def run(self):
+        try:
+            df = build_dataframe(
+                self._req,
+                self._folder,
+                progress=lambda p: self.progress.emit(p),
+            )
+            self.finished.emit(df, "")
+        except Exception as e:
+            self.finished.emit(None, f"{e}\n\n{traceback.format_exc()}")
+
+
 # --- main window ----------------------------------------------------------
 class MainWindow(QMainWindow):
     def __init__(self, parent_main_window=None):
@@ -102,7 +122,7 @@ class MainWindow(QMainWindow):
         layout.addLayout(row)
 
         # --- Tag table ---
-        layout.addWidget(QLabel("Tag list (tick các tag muốn xuất):"))
+        layout.addWidget(QLabel("Tag list (select tags to export):"))
         self.tbl_tags = QTableWidget(0, 6)
         self.tbl_tags.setHorizontalHeaderLabels(
             ["✓", "Tag name", "Description", "Units", "Range", "Decimal"]
@@ -176,7 +196,7 @@ class MainWindow(QMainWindow):
         run_row.addWidget(self.btn_create_df)
         layout.addLayout(run_row)
 
-        self.lbl_status = QLabel("Sẵn sàng.")
+        self.lbl_status = QLabel("Ready.")
         layout.addWidget(self.lbl_status)
         return w
 
@@ -198,7 +218,7 @@ class MainWindow(QMainWindow):
 
     # ===== Slots =====
     def on_browse_folder(self):
-        d = QFileDialog.getExistingDirectory(self, "Chọn thư mục TREND")
+        d = QFileDialog.getExistingDirectory(self, "Select TREND folder")
         if d:
             self.ed_folder.setText(d)
             self._load_folder(d)
@@ -209,7 +229,7 @@ class MainWindow(QMainWindow):
 
     def on_browse_save(self):
         p, _ = QFileDialog.getSaveFileName(
-            self, "Lưu CSV", "trend.csv", "CSV files (*.csv);;All files (*.*)"
+            self, "Save CSV", "trend.csv", "CSV files (*.csv);;All files (*.*)"
         )
         if p:
             self.ed_save.setText(p)
@@ -217,20 +237,20 @@ class MainWindow(QMainWindow):
     def _load_folder(self, d: str):
         self._folder = TrendFolderReader(d)
         files = self._folder.files
-        self.lbl_status.setText(f"Đã quét {len(files)} file DSH.")
-        # Gom tag từ TẤT CẢ file → set tag duy nhất (theo tag_name)
+        self.lbl_status.setText(f"Scanned {len(files)} DSH files.")
+        # Chỉ đọc metadata tag từ file đầu tiên — tất cả file cùng folder có cùng bộ tag
         seen: dict[str, TagInfo] = {}
-        for fp in files:
+        if files:
             try:
-                dsh = DshFile(fp)
+                dsh = DshFile(files[0])
+                try:
+                    for t in dsh.iter_tags():
+                        if t.tag_name:
+                            seen[t.tag_name] = t
+                finally:
+                    dsh.close()
             except Exception:
-                continue
-            try:
-                for t in dsh.iter_tags():
-                    if t.tag_name and t.tag_name not in seen:
-                        seen[t.tag_name] = t
-            finally:
-                dsh.close()
+                pass
         self._all_tags = seen
         self._populate_tags(sorted(seen.keys()))
         # Auto-set thời gian dựa trên header file đầu/cuối
@@ -283,21 +303,21 @@ class MainWindow(QMainWindow):
 
     def on_export(self):
         if self._folder is None:
-            QMessageBox.warning(self, "Chưa chọn folder", "Hãy chọn thư mục TREND trước.")
+            QMessageBox.warning(self, "No folder selected", "Please select a TREND folder first.")
             return
         tags = self._selected_tags()
         if not tags:
-            QMessageBox.warning(self, "Chưa chọn tag", "Hãy tick ít nhất 1 tag.")
+            QMessageBox.warning(self, "No tags selected", "Please select at least one tag.")
             return
         save_to = self.ed_save.text().strip()
         if not save_to:
-            QMessageBox.warning(self, "Chưa chọn nơi lưu", "Hãy chọn đường dẫn file CSV.")
+            QMessageBox.warning(self, "No output path", "Please select a CSV output path.")
             return
 
         start = qdt_to_utc(self.dt_from.dateTime())
         end = qdt_to_utc(self.dt_to.dateTime())
         if end <= start:
-            QMessageBox.warning(self, "Khoảng thời gian sai", "To phải lớn hơn From.")
+            QMessageBox.warning(self, "Invalid time range", "'To' must be later than 'From'.")
             return
         sampling = SAMPLING_RATES_SEC[self.cb_sampling.currentText()]
 
@@ -311,7 +331,7 @@ class MainWindow(QMainWindow):
 
         self.btn_export.setEnabled(False)
         self.progress_bar.setValue(0)
-        self.lbl_status.setText("Đang xuất CSV…")
+        self.lbl_status.setText("Exporting CSV…")
 
         worker = ExportWorker(req, self._folder)
         worker.progress.connect(lambda p: self.progress_bar.setValue(int(p * 100)))
@@ -322,25 +342,25 @@ class MainWindow(QMainWindow):
     def _on_export_finished(self, rows: int, error: str):
         self.btn_export.setEnabled(True)
         if error:
-            self.lbl_status.setText("Xuất CSV thất bại.")
+            self.lbl_status.setText("CSV export failed.")
             QMessageBox.critical(self, "CSV export failed", error)
         else:
-            self.lbl_status.setText(f"Xuất CSV thành công: {rows} dòng dữ liệu.")
+            self.lbl_status.setText(f"CSV exported: {rows} rows.")
             QMessageBox.information(self, "CSV export succeeded",
-                                    f"Đã ghi {rows} dòng dữ liệu vào file.")
+                                    f"Written {rows} rows to file.")
 
     def on_create_df_clicked(self):
         if self._folder is None:
-            QMessageBox.warning(self, "Chưa chọn folder", "Hãy chọn thư mục TREND trước.")
+            QMessageBox.warning(self, "No folder selected", "Please select a TREND folder first.")
             return
         tags = self._selected_tags()
         if not tags:
-            QMessageBox.warning(self, "Chưa chọn tag", "Hãy tick ít nhất 1 tag.")
+            QMessageBox.warning(self, "No tags selected", "Please select at least one tag.")
             return
         start = qdt_to_utc(self.dt_from.dateTime())
         end = qdt_to_utc(self.dt_to.dateTime())
         if end <= start:
-            QMessageBox.warning(self, "Khoảng thời gian sai", "To phải lớn hơn From.")
+            QMessageBox.warning(self, "Invalid time range", "'To' must be later than 'From'.")
             return
         sampling = SAMPLING_RATES_SEC[self.cb_sampling.currentText()]
 
@@ -351,46 +371,55 @@ class MainWindow(QMainWindow):
             sampling_sec=sampling,
             tags=tags,
         )
-        try:
-            df = build_dataframe(req, self._folder)
 
-            # Chuyển Datetime UTC-aware → UTC+7 naive (khớp pipeline final_df)
-            df = df.copy()
-            df["Datetime"] = (
-                df["Datetime"]
-                .dt.tz_convert("Asia/Ho_Chi_Minh")
-                .dt.tz_localize(None)
-            )
-            self.LTDT_dataframe = df
+        self.btn_create_df.setEnabled(False)
+        self.btn_export.setEnabled(False)
+        self.progress_bar.setValue(0)
+        self.lbl_status.setText("⏳ Building DataFrame…")
 
-            # Đẩy vào pipeline
-            pmw = self._parent_main_window
-            if pmw is not None and hasattr(pmw, "set_final_df"):
-                existing = getattr(pmw, "final_df", None)
-                if existing is not None and not existing.empty:
-                    merged = pd.merge(existing, df, on="Datetime", how="outer")
-                    merged = merged.sort_values("Datetime").reset_index(drop=True)
-                    pmw.set_final_df(merged, folder_name="LTDT_merged")
-                    status = f"Đã merge vào final_df: {len(merged)} hàng × {len(merged.columns)} cột"
-                else:
-                    pmw.set_final_df(df, folder_name="LTDT")
-                    status = f"Đã set final_df từ LTDT: {len(df)} hàng × {len(df.columns)} cột"
-            else:
-                status = f"LTDT_dataframe: {len(df)} hàng × {len(df.columns)} cột (chưa kết nối pipeline)"
+        worker = CreateDFWorker(req, self._folder)
+        worker.progress.connect(lambda p: self.progress_bar.setValue(int(p * 100)))
+        worker.finished.connect(self._on_create_df_finished)
+        self._df_worker = worker
+        threading.Thread(target=worker.run, daemon=True).start()
 
-            self.lbl_status.setText(status)
-            QMessageBox.information(self, "Tạo DataFrame thành công", status)
-        except Exception as e:
-            QMessageBox.critical(self, "Lỗi tạo DataFrame", f"{e}\n\n{traceback.format_exc()}")
+    def _on_create_df_finished(self, df, error: str):
+        self.btn_create_df.setEnabled(True)
+        self.btn_export.setEnabled(True)
+        self.progress_bar.setValue(100)
+        if error:
+            self.lbl_status.setText("❌ DataFrame creation failed.")
+            QMessageBox.critical(self, "DataFrame error", error)
+            return
+
+        # Chuyển Datetime UTC-aware → UTC+7 naive (khớp pipeline final_df)
+        df = df.copy()
+        df["Datetime"] = (
+            df["Datetime"]
+            .dt.tz_convert("Asia/Ho_Chi_Minh")
+            .dt.tz_localize(None)
+        )
+        self.LTDT_dataframe = df
+
+        # Đẩy vào pipeline
+        pmw = self._parent_main_window
+        if pmw is not None and hasattr(pmw, "set_final_df"):
+            pmw.set_final_df(df, folder_name="LTDT")
+            status = f"✅ DataFrame set from LTDT: {len(df)} rows × {len(df.columns)} columns"
+        else:
+            status = f"✅ LTDT_dataframe: {len(df)} rows × {len(df.columns)} columns"
+
+        self.lbl_status.setText(status)
+        QMessageBox.information(self, "DataFrame created", status)
 
     def on_inspect(self):
-        p, _ = QFileDialog.getOpenFileName(self, "Mở DSH", "", "DSH files (*.DSH *.dsh)")
+        p, _ = QFileDialog.getOpenFileName(self, "Open DSH file", "", "DSH files (*.DSH *.dsh)")
         if not p:
             return
         try:
             dsh = DshFile(p)
         except Exception as e:
-            QMessageBox.critical(self, "Lỗi", str(e))
+            QMessageBox.critical(self, "Error", str(e))
             return
         try:
             h = dsh.header

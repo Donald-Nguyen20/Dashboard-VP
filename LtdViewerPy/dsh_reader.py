@@ -302,6 +302,7 @@ class TrendFolderReader:
 
     def _scan(self) -> list[Path]:
         if not self.trend_dir.is_dir():
+            self._file_begin_unix: list[int] = []
             return []
         items: list[tuple[datetime, Path]] = []
         for p in self.trend_dir.iterdir():
@@ -316,25 +317,58 @@ class TrendFolderReader:
             except ValueError:
                 continue
         items.sort(key=lambda x: x[0])
+        self._file_begin_unix = [int(dt.timestamp()) for dt, _ in items]
         return [p for _dt, p in items]
 
     def files_in_range(self, start: datetime, end: datetime) -> list[Path]:
         """Trả về DSH file có begin_time/end_time chạm [start, end].
         Vì tên file = thời điểm bắt đầu, ta lấy mọi file mà tên <= end và file kế tiếp > start."""
         out: list[Path] = []
-        starts = []
-        for p in self.files:
-            m = DSH_FILENAME_RE.match(p.name)
-            dt = datetime.strptime(m.group("date") + m.group("time"), "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
-            starts.append((dt, p))
-        for i, (dt, p) in enumerate(starts):
-            nxt = starts[i + 1][0] if i + 1 < len(starts) else None
-            if dt > end:
+        bt = self._file_begin_unix
+        for i, p in enumerate(self.files):
+            file_dt = datetime.fromtimestamp(bt[i], tz=timezone.utc)
+            nxt_dt = datetime.fromtimestamp(bt[i + 1], tz=timezone.utc) if i + 1 < len(self.files) else None
+            if file_dt > end:
                 break
-            if nxt is not None and nxt <= start:
+            if nxt_dt is not None and nxt_dt <= start:
                 continue
             out.append(p)
         return out
+
+    def files_for_grid(self, start: datetime, end: datetime, step_sec: int) -> list[Path]:
+        """Return only files needed for forward-fill at each step_sec grid point.
+
+        For each grid point, keeps the last file whose begin_time <= grid_ts plus
+        its predecessor (safety: file may start at grid_ts but first record arrives
+        one recording interval later, so the prior file holds the actual last value).
+        """
+        candidates = self.files_in_range(start, end)
+        n = len(candidates)
+        if n <= 2:
+            return candidates
+
+        bt_map = {p: bt for p, bt in zip(self.files, self._file_begin_unix)}
+        cb = [bt_map[p] for p in candidates]
+
+        start_unix = int(start.timestamp())
+        end_unix = int(end.timestamp())
+        grid_start = (start_unix // step_sec) * step_sec
+
+        needed: set[int] = set()
+        for i in range(n):
+            lo = max(cb[i], grid_start)
+            hi = min(cb[i + 1] if i + 1 < n else end_unix + 1, end_unix + 1)
+            # First grid point on the aligned grid that falls in [lo, hi)
+            if lo <= grid_start:
+                first_gp = grid_start
+            else:
+                first_gp = grid_start + ((lo - grid_start + step_sec - 1) // step_sec) * step_sec
+            if first_gp < hi:
+                needed.add(i)
+                if i > 0:
+                    needed.add(i - 1)
+
+        return [candidates[i] for i in sorted(needed)] if needed else candidates
 
 
 __all__ = [

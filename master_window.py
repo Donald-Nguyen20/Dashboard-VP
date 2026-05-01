@@ -10,7 +10,8 @@ from ML_TAB.windows.ML_tab import ML_Tab
 from Monitoring.windows.monitoring_tab import Monitoring_Tab
 from help_dialog import HelpDialog
 
-
+"""pyinstaller --onedir --name master_window --icon DFA.ico --exclude-module tkinter --exclude-module PyQt5 --exclude-module torch --add-data "ML_TAB\assets;ML_TAB\assets" master_window.py
+"""
 def app_dir():
     """
     Trả về thư mục chứa file .exe khi đóng gói,
@@ -541,6 +542,6 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     apply_theme(app)
     window = MasterWindow()
-    window.show()
+    window.showMaximized()
     sys.exit(app.exec())
     

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import bisect
 import csv
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,6 +59,47 @@ class ExportRequest:
     tags: Sequence[str]
 
 
+_IO_WORKERS = 16
+
+
+def _read_one_file(
+    fpath: Path,
+    tag_names: Sequence[str],
+    end_unix: int,
+    step_sec: int,
+) -> tuple[dict[str, list[int]], dict[str, list[Record]], dict[str, TagInfo]]:
+    local_times: dict[str, list[int]] = {tn: [] for tn in tag_names}
+    local_recs: dict[str, list[Record]] = {tn: [] for tn in tag_names}
+    local_meta: dict[str, TagInfo] = {}
+    try:
+        dsh = DshFile(fpath)
+        wanted = set(tag_names)
+        try:
+            for tag in dsh.iter_tags():
+                if tag.tag_name not in wanted:
+                    continue
+                if tag.tag_name not in local_meta:
+                    local_meta[tag.tag_name] = tag
+                # Keep only the last record per step_sec bucket — avoids loading
+                # thousands of records that will never be used by the grid lookup.
+                bucket_ts: dict[int, int] = {}
+                bucket_rec: dict[int, Record] = {}
+                for rec in dsh.iter_records_for_tag(tag, start_unix=None, end_unix=end_unix):
+                    b = rec.unix_time // step_sec
+                    bucket_ts[b] = rec.unix_time
+                    bucket_rec[b] = rec
+                tlist = local_times[tag.tag_name]
+                rlist = local_recs[tag.tag_name]
+                for b in sorted(bucket_ts):
+                    tlist.append(bucket_ts[b])
+                    rlist.append(bucket_rec[b])
+        finally:
+            dsh.close()
+    except Exception:
+        pass
+    return local_times, local_recs, local_meta
+
+
 def _format_value(value: float, decimal_place: int) -> str:
     if decimal_place <= 0:
         return f"{int(round(value))}"
@@ -70,62 +112,74 @@ def _collect_samples(
     start: datetime,
     end: datetime,
     *,
+    step_sec: int,
     progress: Optional[Callable[[float], None]] = None,
 ) -> tuple[dict[str, list[int]], dict[str, list[Record]], dict[str, TagInfo]]:
-    """Quét records cho mỗi tag, trả về 2 list song song đã sort theo unix_time.
-
-    Returns (sample_times, sample_records, tag_meta) — sample_times[tag] và
-    sample_records[tag] cùng chiều dài, sort tăng dần theo unix_time. Để hỗ trợ
-    forward-fill ở mốc lưới đầu tiên, KHÔNG filter records theo start_unix; chỉ
-    cắt ở end_unix để tránh load đuôi file vô ích.
-    """
     sample_times: dict[str, list[int]] = {tn: [] for tn in tag_names}
     sample_records: dict[str, list[Record]] = {tn: [] for tn in tag_names}
     tag_meta: dict[str, TagInfo] = {}
 
-    files = folder.files_in_range(start, end)
+    files = folder.files_for_grid(start, end, step_sec)
     if not files:
         return sample_times, sample_records, tag_meta
 
     end_unix = int(end.timestamp())
+    n = len(files)
+    workers = min(_IO_WORKERS, n)
+    completed = 0
 
-    for fi, fpath in enumerate(files):
-        try:
-            dsh = DshFile(fpath)
-        except Exception:
+    results: list[tuple | None] = [None] * n
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        future_to_idx = {
+            pool.submit(_read_one_file, fpath, tag_names, end_unix, step_sec): fi
+            for fi, fpath in enumerate(files)
+        }
+        for future in as_completed(future_to_idx):
+            fi = future_to_idx[future]
+            try:
+                results[fi] = future.result()
+            except Exception:
+                results[fi] = ({tn: [] for tn in tag_names}, {tn: [] for tn in tag_names}, {})
+            completed += 1
+            if progress:
+                progress(completed / n)
+
+    for res in results:
+        if res is None:
             continue
-        try:
-            wanted = set(tag_names)
-            for tag in dsh.iter_tags():
-                if tag.tag_name not in wanted:
-                    continue
-                if tag.tag_name not in tag_meta:
-                    tag_meta[tag.tag_name] = tag
-                tlist = sample_times[tag.tag_name]
-                rlist = sample_records[tag.tag_name]
-                for rec in dsh.iter_records_for_tag(
-                    tag, start_unix=None, end_unix=end_unix
-                ):
-                    tlist.append(rec.unix_time)
-                    rlist.append(rec)
-        finally:
-            dsh.close()
+        lt, lr, lm = res
+        for tn in tag_names:
+            sample_times[tn].extend(lt[tn])
+            sample_records[tn].extend(lr[tn])
+        for k, v in lm.items():
+            if k not in tag_meta:
+                tag_meta[k] = v
 
-        if progress:
-            progress((fi + 1) / len(files))
-
-    # Sort lại defensively: TrendFolderReader đã trả file theo thứ tự thời gian,
-    # và records trong từng file vốn đã sort, nên ts_list thường đã sort. Tuy
-    # nhiên record ở đường biên (vd 16:00:00 có ở cả file 15:00 và 16:00) có
-    # thể trùng unix_time -> stable sort giữ thứ tự (file sau ghi đè file
-    # trước khi lookup vì bisect_right trả index lớn nhất với ts <= mốc).
+    # Sort then deduplicate by bucket across file boundaries: keep the latest
+    # record per step_sec bucket so the merged list is as compact as the grid.
     for tn in tag_names:
         ts_list = sample_times[tn]
+        rec_list = sample_records[tn]
         if len(ts_list) <= 1:
             continue
         order = sorted(range(len(ts_list)), key=lambda i: ts_list[i])
-        sample_times[tn] = [ts_list[i] for i in order]
-        sample_records[tn] = [sample_records[tn][i] for i in order]
+        ts_sorted = [ts_list[i] for i in order]
+        rec_sorted = [rec_list[i] for i in order]
+
+        dedup_ts: list[int] = []
+        dedup_rec: list[Record] = []
+        prev_bucket = -1
+        for ts, rec in zip(ts_sorted, rec_sorted):
+            b = ts // step_sec
+            if b == prev_bucket:
+                dedup_ts[-1] = ts
+                dedup_rec[-1] = rec
+            else:
+                dedup_ts.append(ts)
+                dedup_rec.append(rec)
+                prev_bucket = b
+        sample_times[tn] = dedup_ts
+        sample_records[tn] = dedup_rec
 
     return sample_times, sample_records, tag_meta
 
@@ -164,7 +218,8 @@ def export_trend_csv(
     progress: Optional[Callable[[float], None]] = None,
 ) -> int:
     sample_times, sample_records, meta = _collect_samples(
-        folder, request.tags, request.start, request.end, progress=progress
+        folder, request.tags, request.start, request.end,
+        step_sec=request.sampling_sec, progress=progress,
     )
 
     grid = _resample_grid(request.start, request.end, request.sampling_sec)
@@ -215,7 +270,8 @@ def build_dataframe(
     progress: Optional[Callable[[float], None]] = None,
 ) -> pd.DataFrame:
     sample_times, sample_records, meta = _collect_samples(
-        folder, request.tags, request.start, request.end, progress=progress
+        folder, request.tags, request.start, request.end,
+        step_sec=request.sampling_sec, progress=progress,
     )
     grid = _resample_grid(request.start, request.end, request.sampling_sec)
 
@@ -233,8 +289,8 @@ def build_dataframe(
     rename_map = {tag: meta[tag].description for tag in request.tags if tag in meta and meta[tag].description}
     df = df.rename(columns=rename_map)
 
-    for col in df.columns[1:]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+    for i in range(1, len(df.columns)):
+        df.iloc[:, i] = pd.to_numeric(df.iloc[:, i], errors="coerce")
 
     return df
 
