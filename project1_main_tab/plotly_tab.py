@@ -26,6 +26,7 @@ from project1_main_tab.Plotly_modules.plotly_spc_control_chart import plotly_spc
 from project1_main_tab.Plotly_modules.plotly_rolling_band import plotly_rolling_band
 from project1_main_tab.Plotly_modules.plotly_mw_binned_scatter import plotly_mw_binned_scatter
 from project1_main_tab.Plotly_modules.plotly_100_stacked_bar import plotly_100_stacked_bar
+from project1_main_tab.Plotly_modules.plotly_xy_plot import plotly_xy_plot
 from project1_main_tab.plot_tab import MultiRangeDialog
 from project1_main_tab.plot_tab import MultiRangeDialog, SimpleScaleDialog
 IGNORED_COLUMNS = {'datetime', 'date', 'time', 'sourcefolder'}
@@ -87,6 +88,67 @@ class VariableSelectorDialog(QDialog):
             cb.setChecked(False)
 
 
+class XYVariableSelectorDialog(QDialog):
+    """Dialog chọn 1 biến X và nhiều biến Y cho XY Plot."""
+    def __init__(self, columns: list[str], x_col: str = "", y_cols: list[str] = None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("XY Plot — Chọn biến")
+        self.setMinimumSize(420, 560)
+        y_cols = y_cols or []
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(8)
+
+        # --- X variable (single select ComboBox) ---
+        layout.addWidget(QLabel("<b>Trục X (1 biến):</b>"))
+        self.x_combo = QComboBox()
+        self.x_combo.addItems(columns)
+        if x_col in columns:
+            self.x_combo.setCurrentText(x_col)
+        layout.addWidget(self.x_combo)
+
+        # --- Y variables (multi checkboxes) ---
+        layout.addWidget(QLabel("<b>Trục Y (nhiều biến):</b>"))
+
+        y_widget = QWidget()
+        y_layout = QVBoxLayout(y_widget)
+        y_layout.setContentsMargins(4, 4, 4, 4)
+        y_layout.setSpacing(2)
+        self.y_checkboxes: list[QCheckBox] = []
+        for col in columns:
+            cb = QCheckBox(col)
+            cb.setChecked(col in y_cols)
+            y_layout.addWidget(cb)
+            self.y_checkboxes.append(cb)
+        y_layout.addStretch()
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(y_widget)
+        scroll.setMinimumHeight(250)
+        layout.addWidget(scroll)
+
+        action_row = QHBoxLayout()
+        btn_all = QPushButton("✅ Chọn tất cả Y")
+        btn_none = QPushButton("❌ Bỏ chọn Y")
+        btn_all.clicked.connect(lambda: [cb.setChecked(True) for cb in self.y_checkboxes])
+        btn_none.clicked.connect(lambda: [cb.setChecked(False) for cb in self.y_checkboxes])
+        action_row.addWidget(btn_all)
+        action_row.addWidget(btn_none)
+        layout.addLayout(action_row)
+
+        btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btn_box.accepted.connect(self.accept)
+        btn_box.rejected.connect(self.reject)
+        layout.addWidget(btn_box)
+
+    def get_x_col(self) -> str:
+        return self.x_combo.currentText()
+
+    def get_y_cols(self) -> list[str]:
+        return [cb.text() for cb in self.y_checkboxes if cb.isChecked()]
+
+
 class PlotlyTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -95,6 +157,9 @@ class PlotlyTab(QWidget):
         self.scales: dict[str, float] = {}
         self._last_fig = None
         self._last_html_path = None  # Đường dẫn HTML đồ thị cuối → Monitoring nhúng nguyên đồ thị (không dùng kaleido)
+        self._xy_swapped = False
+        self._xy_x_col: str = ""
+        self._xy_y_cols: list[str] = []
 
         # ===== ROOT LAYOUT: full khung =====
         root = QVBoxLayout(self)
@@ -108,7 +173,7 @@ class PlotlyTab(QWidget):
 
         self.chart_type_combo = QComboBox()
         self.chart_type_combo.addItems([
-            "Line", "Area", "Scatter", "Bar (Max)", "100% Stacked Bar", "Z-score Scatter",
+            "Line", "Area", "Scatter", "XY Plot", "Bar (Max)", "100% Stacked Bar", "Z-score Scatter",
             "Heatmap Correlation", "Histogram", "Boxplot",
             "Histogram + Boxplot", "Violin", "Pairplot",
             "Pie", "Parallel Coordinates","SPC Control (I-Chart)",
@@ -119,6 +184,11 @@ class PlotlyTab(QWidget):
 
         self.btn_variable = QPushButton("🧩 Variable")
         self.btn_variable.clicked.connect(self.open_variable_dialog)
+
+        self.btn_swap = QPushButton("⇄ Swap X-Y")
+        self.btn_swap.setToolTip("Đảo trục X và Y cho Scatter")
+        self.btn_swap.clicked.connect(self.swap_xy)
+        self.btn_swap.setVisible(False)
 
         self.range_spin = QSpinBox()
         self.range_spin.setMinimum(1)
@@ -141,6 +211,7 @@ class PlotlyTab(QWidget):
         topbar.addWidget(QLabel("Biểu đồ:"))
         topbar.addWidget(self.chart_type_combo)
         topbar.addWidget(self.btn_variable)
+        topbar.addWidget(self.btn_swap)
         topbar.addWidget(self.btn_scale)
         topbar.addWidget(QLabel("Range:"))
         topbar.addWidget(self.range_spin)
@@ -188,18 +259,38 @@ class PlotlyTab(QWidget):
             return
 
         columns = [col for col in self.df.columns if col.lower() not in IGNORED_COLUMNS]
-        dialog = VariableSelectorDialog(columns, self.selected_vars or columns, self)
+        chart_type = self.chart_type_combo.currentText()
 
-        if dialog.exec():
-            self.selected_vars = dialog.get_selected_variables()
-            self.draw_chart()
+        if chart_type == "XY Plot":
+            dialog = XYVariableSelectorDialog(columns, self._xy_x_col, self._xy_y_cols, self)
+            if dialog.exec():
+                self._xy_x_col = dialog.get_x_col()
+                self._xy_y_cols = dialog.get_y_cols()
+                self.draw_chart()
+        else:
+            dialog = VariableSelectorDialog(columns, self.selected_vars or columns, self)
+            if dialog.exec():
+                self.selected_vars = dialog.get_selected_variables()
+                self.draw_chart()
 
     def _on_chart_type_changed(self, text: str):
         t = (text or "").strip().lower()
         is_line = (t == "line")
         is_bar = (t == "bar (max)")
         is_stacked = (t == "100% stacked bar")
+        is_scatter = (t == "scatter")
         self.range_spin.setVisible(is_line or is_bar or is_stacked)
+        self.btn_swap.setVisible(is_scatter)
+        if not is_scatter:
+            self._xy_swapped = False
+            self.btn_swap.setText("⇄ Swap X-Y")
+
+    def swap_xy(self):
+        if len(self.selected_vars) == 2:
+            self._xy_swapped = not self._xy_swapped
+            label = "⇄ Swap X-Y" if self._xy_swapped else "⇄ Swap X-Y"
+            self.btn_swap.setText(label)
+            self.draw_chart()
 
     def get_filtered_df(self):
         df_filtered = self.df.copy()
@@ -216,19 +307,40 @@ class PlotlyTab(QWidget):
         df_filtered = self.get_filtered_df()
         chart_type = self.chart_type_combo.currentText()
 
-        if not self.selected_vars:
+        if chart_type != "XY Plot" and not self.selected_vars:
             QMessageBox.warning(self, "Thiếu biến", "Chọn ít nhất 1 biến để vẽ.")
             return
         if df_filtered.empty:
             QMessageBox.warning(self, "Không có dữ liệu", "Không có dữ liệu trong khoảng thời gian.")
             return
 
+        if chart_type == "XY Plot":
+            if not self._xy_x_col or not self._xy_y_cols:
+                QMessageBox.warning(self, "Thiếu biến", "Bấm 🧩 Variable để chọn 1 biến X và ít nhất 1 biến Y.")
+                return
+            try:
+                fig = plotly_xy_plot(df_filtered, self._xy_x_col, self._xy_y_cols)
+            except Exception as e:
+                QMessageBox.critical(self, "Lỗi", f"Không vẽ được XY Plot: {e}")
+                return
+            if fig is None:
+                QMessageBox.warning(self, "Không đủ dữ liệu", "Không có dữ liệu hợp lệ để vẽ.")
+                return
+            self._last_fig = fig
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+            pio.write_html(fig, file=tmp.name, include_plotlyjs=True, full_html=True,
+                          auto_open=False, config={"responsive": True, "displayModeBar": True})
+            self._last_html_path = tmp.name
+            self.plot_view.load(QUrl.fromLocalFile(tmp.name))
+            return
+
         if chart_type == "Scatter":
             if len(self.selected_vars) != 2:
                 QMessageBox.warning(self, "Thiếu biến", "Scatter cần đúng 2 biến (X và Y).")
                 return
+            x_var, y_var = (self.selected_vars[1], self.selected_vars[0]) if self._xy_swapped else (self.selected_vars[0], self.selected_vars[1])
             try:
-                fig = plotly_scatter2d(df_filtered, self.selected_vars[0], self.selected_vars[1])
+                fig = plotly_scatter2d(df_filtered, x_var, y_var)
             except Exception as e:
                 QMessageBox.critical(self, "Lỗi", f"Không vẽ được scatter: {e}")
                 return

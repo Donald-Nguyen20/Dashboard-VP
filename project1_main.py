@@ -208,6 +208,9 @@ QPushButton:pressed {
         if folder and folder == folder_name and folder in self.MONITORING_COL_MAP:
             self._inject_monitoring_data(folder)
 
+        # Refresh danh sách folder để highlight folder đang dùng
+        self.load_folders(self.search_box.text())
+
     def get_current_df_for_ml(self):
         """
         Hàm cung cấp DataFrame cho MLApplicationTab.
@@ -292,24 +295,43 @@ QPushButton:pressed {
             if ft and ft not in name.lower():
                 continue
 
-            btn = QPushButton(name)
+            is_active = (name == getattr(self, "current_folder_name", None))
+            btn = QPushButton(("▶  " if is_active else "") + name)
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet("""
-                QPushButton {
-                    text-align: left;
-                    padding-left: 12px;
-                    background-color: transparent;
-                    color: #000000;
-                    font-weight: bold;
-                    border: none;
-                    border-radius: 5px;
-                    margin-bottom: 4px;
-                }
-                QPushButton:hover {
-                    background-color: #cce5ff;
-                    color: #004a99;
-                }
-            """)
+            if is_active:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        text-align: left;
+                        padding-left: 8px;
+                        background-color: #2f6fe4;
+                        color: white;
+                        font-weight: bold;
+                        border: none;
+                        border-radius: 5px;
+                        margin-bottom: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #4a8fe8;
+                        color: white;
+                    }
+                """)
+            else:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        text-align: left;
+                        padding-left: 12px;
+                        background-color: transparent;
+                        color: #000000;
+                        font-weight: bold;
+                        border: none;
+                        border-radius: 5px;
+                        margin-bottom: 4px;
+                    }
+                    QPushButton:hover {
+                        background-color: #cce5ff;
+                        color: #004a99;
+                    }
+                """)
             btn.clicked.connect(lambda _, n=name: self.open_folder(n))
             self.scroll_layout.addWidget(btn)
             matched_count += 1

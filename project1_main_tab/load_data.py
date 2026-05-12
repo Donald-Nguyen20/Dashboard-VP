@@ -386,39 +386,41 @@ class PreviewWidget(QWidget):
         layout.setSpacing(0)
 
         filter_layout, self.start_time, self.end_time = create_datetime_filter_controls(df)
-        filter_layout.setSpacing(10)
-        self.start_time.setFixedWidth(180)
-        self.end_time.setFixedWidth(180)
+        filter_layout.setSpacing(6)
+        filter_layout.setContentsMargins(6, 0, 6, 2)
+        filter_layout.setAlignment(Qt.AlignVCenter)
+        self.start_time.setFixedSize(180, 32)
+        self.end_time.setFixedSize(180, 32)
 
         layout.addLayout(filter_layout)
-        
+
         self.btn_refresh = QPushButton("🔄 Refresh")
-        self.btn_refresh.setFixedSize(100, 28)
+        self.btn_refresh.setFixedHeight(32)
         self.btn_refresh.clicked.connect(self.update_table)
         filter_layout.addWidget(self.btn_refresh)
 
         # 👉 Nút Clean Data
         self.btn_clean = QPushButton("🧹 Clean Data")
-        self.btn_clean.setFixedSize(120, 28)
+        self.btn_clean.setFixedHeight(32)
         self.btn_clean.clicked.connect(self.open_cleaning_dialog)
         filter_layout.addWidget(self.btn_clean)
 
         # 👉 Nút NaN Manager
         self.btn_nan = QPushButton("NaN status")
-        self.btn_nan.setFixedSize(110, 28)
+        self.btn_nan.setFixedHeight(32)
         self.btn_nan.clicked.connect(self.open_nan_status_dialog)
         filter_layout.addWidget(self.btn_nan)
 
-        self.btn_delete = QPushButton("🗑 Delete Features")
-        self.btn_delete.setFixedSize(140, 28)
+        self.btn_delete = QPushButton("🗑 Delete Feature")
+        self.btn_delete.setFixedHeight(32)
         self.btn_delete.clicked.connect(self.open_delete_columns_dialog)
         filter_layout.addWidget(self.btn_delete)
 
         # 📐 Formula Menu
         self.btn_formula_menu = QToolButton()
-        self.btn_formula_menu.setText("🧠 Formula Module ⬇")
+        self.btn_formula_menu.setText("🧠 Formula Module")
         self.btn_formula_menu.setPopupMode(QToolButton.MenuButtonPopup)
-        self.btn_formula_menu.setFixedSize(180, 28)
+        self.btn_formula_menu.setFixedHeight(32)
 
         # Tạo menu
         formula_menu = QMenu(self)
@@ -433,7 +435,7 @@ class PreviewWidget(QWidget):
 
         # 👉 Nút Export
         self.btn_export = QPushButton("💾 Export")
-        self.btn_export.setFixedSize(120, 28)
+        self.btn_export.setFixedHeight(32)
         self.btn_export.clicked.connect(self.export_data)
 
         filter_layout.addWidget(self.btn_export)
