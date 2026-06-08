@@ -31,13 +31,13 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:var(--sans);backgro
 .tc-item{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;transition:background .12s;border-bottom:1px solid var(--bdr)}
 .tc-item:hover{background:#F0EEE8}
 .tc-item.active{background:#FEF0E8;border-left:3px solid var(--acc)}
-.tc-dot{width:8px;height:8px;border-radius:50%;background:#E84040;flex-shrink:0}
+.tc-dot{width:8px;height:8px;border-radius:50%;background:#2266DD;flex-shrink:0}
 .tc-item.active .tc-dot{background:#FFD700}
 .tc-kks{font-family:var(--mono);font-size:11px;color:var(--txt);flex:1}
 .tc-wall{font-size:10px;color:var(--txt3);font-family:var(--mono);background:var(--bg);padding:1px 5px;border-radius:3px}
 
 /* TOOLTIP */
-.tc-tip{position:fixed;background:rgba(26,25,22,.9);color:#fff;border-radius:5px;padding:6px 10px;font-size:11px;font-family:var(--mono);pointer-events:none;opacity:0;transition:opacity .12s;z-index:300;border-left:3px solid #E84040;white-space:nowrap}
+.tc-tip{position:fixed;background:rgba(26,25,22,.9);color:#fff;border-radius:5px;padding:6px 10px;font-size:11px;font-family:var(--mono);pointer-events:none;opacity:0;transition:opacity .12s;z-index:300;border-left:3px solid #2266DD;white-space:nowrap}
 .tc-tip.show{opacity:1}
 </style>
 </head>
@@ -493,6 +493,61 @@ const SSH_PANEL_PARAMS = { zPositions: [], cx: 0, topY: 0 };
 }
 
 
+// ── FINAL SUPERHEATER PENDANTS (FSH) ─────────────────────────
+// 37 tấm FSH, nhỏ hơn SSH, bên phải SSH, nằm trên phần nose (Y > Y_NOSE_T)
+const FSH_PANEL_PARAMS = { zPositions: [], cx: 0, topY: 0 };
+{
+  const sshPanelD = FW * 0.40;
+  const sshCX     = FX_L + sshPanelD / 2 + FL(1500);
+
+  const panelD  = FW * 0.26;
+  const panelH  = FL(5500);
+  const panelCX = sshCX + sshPanelD / 2 + FL(700) + panelD / 2;
+  const panelY  = (Y_NOSE_T + Y_TOP) / 2 - FL(850);
+
+  const HDR_R  = FL(120);
+  const TUBE_R = FL(20);
+  const N_TUBE = 37;
+
+  const Y_hdr    = panelY + panelH / 2 - HDR_R;
+  const Y_bot    = panelY - panelH / 2;
+  const tubeH    = Y_hdr - HDR_R - Y_bot;
+  const Y_tubeCY = (Y_hdr - HDR_R + Y_bot) / 2;
+
+  const matHdr  = new THREE.MeshPhongMaterial({ color: 0xBB4400, shininess: 70 });
+  const matTube = new THREE.MeshPhongMaterial({ color: 0xCC6008, shininess: 30 });
+  const hdrGeo  = new THREE.CylinderGeometry(HDR_R, HDR_R, panelD, 20);
+  const hdrEdGeo = new THREE.EdgesGeometry(hdrGeo);
+  const tubeGeo = new THREE.CylinderGeometry(TUBE_R, TUBE_R, tubeH, 6);
+
+  FSH_PANEL_PARAMS.cx   = panelCX;
+  FSH_PANEL_PARAMS.topY = Y_hdr + HDR_R + FL(200);
+
+  evenSpread(37, FZ_R, FZ_F).forEach(z => {
+    FSH_PANEL_PARAMS.zPositions.push(z);
+
+    const hdr = new THREE.Mesh(hdrGeo, matHdr.clone());
+    hdr.rotation.z = Math.PI / 2;
+    hdr.position.set(panelCX, Y_hdr, z);
+    scene.add(hdr);
+    const hdrEl = new THREE.LineSegments(
+      hdrEdGeo,
+      new THREE.LineBasicMaterial({ color: 0x883300 })
+    );
+    hdrEl.rotation.z = Math.PI / 2;
+    hdrEl.position.set(panelCX, Y_hdr, z);
+    scene.add(hdrEl);
+
+    const xStep = panelD / (N_TUBE + 1);
+    for (let t = 0; t < N_TUBE; t++) {
+      const tx = panelCX - panelD / 2 + xStep * (t + 1);
+      const tube = new THREE.Mesh(tubeGeo, matTube);
+      tube.position.set(tx, Y_tubeCY, z);
+      scene.add(tube);
+    }
+  });
+}
+
 // ── SEPARATOR DRUM ────────────────────────────────────────────
 const sepGeo  = new THREE.CylinderGeometry(FL(1100), FL(1100), FL(4000), 32);
 const sepMesh = new THREE.Mesh(sepGeo, mkMat(0x44AA44, 0.75));
@@ -595,7 +650,7 @@ const tcGroup  = new THREE.Group();
 scene.add(tcGroup);
 
 const DOT_R  = FL(180);
-const matDot = new THREE.MeshPhongMaterial({ color: 0xE84040, emissive: 0xC82020, emissiveIntensity: 0.4 });
+const matDot = new THREE.MeshPhongMaterial({ color: 0x2266DD, emissive: 0x1144AA, emissiveIntensity: 0.4 });
 
 TC_DATA.forEach((tc, idx) => {
   const geo  = new THREE.SphereGeometry(DOT_R, 10, 8);
@@ -614,7 +669,7 @@ TC_DATA.forEach((tc, idx) => {
   const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
   const line = new THREE.Line(
     lineGeo,
-    new THREE.LineBasicMaterial({ color: 0xE84040, opacity: 0.7, transparent: true })
+    new THREE.LineBasicMaterial({ color: 0x2266DD, opacity: 0.7, transparent: true })
   );
   tcGroup.add(line);
 });
@@ -663,9 +718,9 @@ function selectTC(idx) {
   // Reset all dots to original color
   tcMeshes.forEach((m, i) => {
     let origCol, origEmi;
-    if (i < loCount)       { origCol = 0xE84040; origEmi = 0xC82020; }
+    if (i < loCount)       { origCol = 0x2266DD; origEmi = 0x1144AA; }
     else if (i < sshStart) { origCol = 0x2266DD; origEmi = 0x1144AA; }
-    else                   { origCol = 0xFF8800; origEmi = 0xDD6600; }
+    else                   { origCol = 0x2266DD; origEmi = 0x1144AA; }
     m.material.color.setHex(i === idx ? 0xFFD700 : origCol);
     m.material.emissive.setHex(i === idx ? 0xFFAA00 : origEmi);
   });
@@ -757,7 +812,7 @@ const SSH_TC_DATA = SSH_PANEL_PARAMS.zPositions.map((z, i) => ({
 window.SSH_TC_DATA_REF = SSH_TC_DATA;
 
 {
-  const matSSH  = new THREE.MeshPhongMaterial({ color: 0xFF8800, emissive: 0xDD6600, emissiveIntensity: 0.4 });
+  const matSSH  = new THREE.MeshPhongMaterial({ color: 0x2266DD, emissive: 0x1144AA, emissiveIntensity: 0.4 });
   const DOT_SSH = FL(180);
 
   SSH_TC_DATA.forEach(tc => {
@@ -774,7 +829,50 @@ window.SSH_TC_DATA_REF = SSH_TC_DATA;
     ];
     tcGroup.add(new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(linePts),
-      new THREE.LineBasicMaterial({ color: 0xFF8800, opacity: 0.7, transparent: true })
+      new THREE.LineBasicMaterial({ color: 0x2266DD, opacity: 0.7, transparent: true })
+    ));
+  });
+}
+
+// ── FSH TC SENSORS (10HAH60CT001~007) ────────────────────────
+// P1~P37: left(FZ_F, idx 36) → right(FZ_R, idx 0) ; step 6 panels
+const FSH_TC_MAP = [
+  { ct: '001', pNum: 37, pIdx: 36 },
+  { ct: '002', pNum: 31, pIdx: 30 },
+  { ct: '003', pNum: 25, pIdx: 24 },
+  { ct: '004', pNum: 19, pIdx: 18 },
+  { ct: '005', pNum: 13, pIdx: 12 },
+  { ct: '006', pNum:  7, pIdx:  6 },
+  { ct: '007', pNum:  1, pIdx:  0 },
+];
+const FSH_TC_DATA = FSH_TC_MAP.map(m => ({
+  kks:  '10HAH60CT' + m.ct,
+  wall: 'FSH P' + m.pNum + ' #3',
+  x: FSH_PANEL_PARAMS.cx + FL(1000),
+  y: FSH_PANEL_PARAMS.topY - FL(1000),
+  z: FSH_PANEL_PARAMS.zPositions[m.pIdx],
+}));
+window.FSH_TC_DATA_REF = FSH_TC_DATA;
+
+{
+  const matFSH  = new THREE.MeshPhongMaterial({ color: 0x2266DD, emissive: 0x1144AA, emissiveIntensity: 0.4 });
+  const DOT_FSH = FL(180);
+
+  FSH_TC_DATA.forEach(tc => {
+    const geo  = new THREE.SphereGeometry(DOT_FSH, 10, 8);
+    const mesh = new THREE.Mesh(geo, matFSH.clone());
+    mesh.position.set(tc.x, tc.y, tc.z);
+    mesh.userData = { kks: tc.kks, wall: tc.wall, noWallSuffix: true, idx: tcMeshes.length };
+    tcGroup.add(mesh);
+    tcMeshes.push(mesh);
+
+    const linePts = [
+      new THREE.Vector3(tc.x, tc.y - DOT_FSH, tc.z),
+      new THREE.Vector3(tc.x, tc.y - FL(400),  tc.z),
+    ];
+    tcGroup.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(linePts),
+      new THREE.LineBasicMaterial({ color: 0x2266DD, opacity: 0.7, transparent: true })
     ));
   });
 }
@@ -819,7 +917,24 @@ TC_DATA.forEach((tc, idx) => {
   window.SSH_TC_DATA_REF.forEach((tc, i) => {
     const el = document.createElement('div');
     el.className = 'tc-item';
-    el.innerHTML = '<span class="tc-dot" style="background:#FF8800"></span><span class="tc-kks">' + tc.kks + '</span><span class="tc-wall">' + tc.wall + '</span>';
+    el.innerHTML = '<span class="tc-dot"></span><span class="tc-kks">' + tc.kks + '</span><span class="tc-wall">' + tc.wall + '</span>';
+    el.addEventListener('click', () => selectTC(baseIdx + i));
+    list.appendChild(el);
+  });
+}
+
+// FSH TC separator
+{ const s = document.createElement('div');
+  s.style.cssText = 'padding:5px 12px;font-size:9px;font-family:var(--mono);color:var(--txt3);background:var(--bg);border-bottom:1px solid var(--bdr);letter-spacing:.08em;text-transform:uppercase';
+  s.textContent = 'Final SH TC · HAH60';
+  list.appendChild(s);
+}
+
+{ const baseIdx = TC_DATA.length + window.UP_TC_DATA_REF.length + window.SSH_TC_DATA_REF.length;
+  window.FSH_TC_DATA_REF.forEach((tc, i) => {
+    const el = document.createElement('div');
+    el.className = 'tc-item';
+    el.innerHTML = '<span class="tc-dot"></span><span class="tc-kks">' + tc.kks + '</span><span class="tc-wall">' + tc.wall + '</span>';
     el.addEventListener('click', () => selectTC(baseIdx + i));
     list.appendChild(el);
   });
