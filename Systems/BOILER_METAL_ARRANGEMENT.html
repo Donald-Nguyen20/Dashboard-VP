@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VP1 Boiler 3D</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#F2F0EC;--surf:#fff;--bdr:#E0DDD7;--txt:#1A1916;--txt2:#5C5A54;--txt3:#9C9A94;--acc:#C84B1A;--mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif}
+html,body{width:100%;height:100%;overflow:hidden;font-family:var(--sans);background:var(--bg)}
+.hdr{position:fixed;top:0;left:0;right:0;height:44px;background:var(--surf);border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;padding:0 14px;z-index:200}
+.badge{background:var(--acc);color:#fff;font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:2px;letter-spacing:.06em}
+.hdr-t{font-size:13px;font-weight:500;margin-left:10px}
+.hdr-s{font-size:11px;color:var(--txt3);font-family:var(--mono);margin-left:6px}
+#c{position:fixed;top:44px;left:0;width:calc(100% - 260px);height:calc(100% - 44px);cursor:grab}
+#c:active{cursor:grabbing}
+.lp{position:fixed;top:56px;left:10px;z-index:100;display:flex;flex-direction:column;gap:5px}
+.cb{background:var(--surf);border:1px solid var(--bdr);border-radius:5px;padding:5px 10px;font-size:11px;font-family:var(--mono);color:var(--txt2);cursor:pointer;transition:all .15s;white-space:nowrap}
+.cb:hover{background:var(--bg)}.cb.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.csep{height:1px;background:var(--bdr);margin:2px 0}
+.glbl{font-size:9px;font-family:var(--mono);color:var(--txt3);padding:0 2px;letter-spacing:.08em}
+
+/* TC PANEL */
+.tc-panel{position:fixed;top:44px;right:0;width:258px;height:calc(100% - 44px);background:var(--surf);border-left:1px solid var(--bdr);display:flex;flex-direction:column;z-index:100}
+.tc-panel-hdr{padding:10px 12px;border-bottom:1px solid var(--bdr);background:var(--bg)}
+.tc-panel-title{font-size:12px;font-weight:500;color:var(--txt)}
+.tc-panel-sub{font-size:10px;color:var(--txt3);font-family:var(--mono);margin-top:2px}
+.tc-list{flex:1;overflow-y:auto;padding:4px 0}
+.tc-item{display:flex;align-items:center;gap:8px;padding:6px 12px;cursor:pointer;transition:background .12s;border-bottom:1px solid var(--bdr)}
+.tc-item:hover{background:#F0EEE8}
+.tc-item.active{background:#FEF0E8;border-left:3px solid var(--acc)}
+.tc-dot{width:8px;height:8px;border-radius:50%;background:#E84040;flex-shrink:0}
+.tc-item.active .tc-dot{background:#FFD700}
+.tc-kks{font-family:var(--mono);font-size:11px;color:var(--txt);flex:1}
+.tc-wall{font-size:10px;color:var(--txt3);font-family:var(--mono);background:var(--bg);padding:1px 5px;border-radius:3px}
+
+/* TOOLTIP */
+.tc-tip{position:fixed;background:rgba(26,25,22,.9);color:#fff;border-radius:5px;padding:6px 10px;font-size:11px;font-family:var(--mono);pointer-events:none;opacity:0;transition:opacity .12s;z-index:300;border-left:3px solid #E84040;white-space:nowrap}
+.tc-tip.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div style="display:flex;align-items:center">
+    <span class="badge">VP1 U1</span>
+    <span class="hdr-t">Boiler 3D Model</span>
+    <span class="hdr-s">K730-105 · IHI · Van Phong 1</span>
+  </div>
+</div>
+<canvas id="c"></canvas>
+
+<!-- TC PANEL -->
+<div class="tc-panel">
+  <div class="tc-panel-hdr">
+    <div class="tc-panel-title">Boiler TC Sensors</div>
+    <div class="tc-panel-sub">HAD10 · HAD21~25 · HAH50</div>
+  </div>
+  <div class="tc-list" id="tc-list"></div>
+</div>
+
+<!-- TOOLTIP -->
+<div class="tc-tip" id="tc-tip"></div>
+<div class="lp">
+  <div class="glbl">VIEW</div>
+  <button class="cb" onclick="APP.setCam('iso')">⬡ Isometric</button>
+  <button class="cb" onclick="APP.setCam('front')">□ Front</button>
+  <button class="cb" onclick="APP.setCam('side')">□ Side</button>
+  <button class="cb" onclick="APP.setCam('top')">□ Top</button>
+  <div class="csep"></div>
+  <button class="cb" onclick="APP.togW()" id="wb">◻ Walls: Transp</button>
+  <button class="cb" onclick="APP.togR()" id="rb">↻ Rotate</button>
+</div>
+
+<script>
+(function init(){
+
+const W = () => window.innerWidth;
+const H = () => window.innerHeight - 44;
+
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(W(), H());
+renderer.setClearColor(0xF2F0EC, 1);
+renderer.shadowMap.enabled = true;
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(38, W()/H(), 0.1, 800);
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.70));
+const sun = new THREE.DirectionalLight(0xfff4e0, 0.9);
+sun.position.set(25, 40, 20);
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xd0e8ff, 0.35);
+fill.position.set(-15, 10, -12);
+scene.add(fill);
+
+// ── SCALE ─────────────────────────────────────────────────────
+// 1 unit = 1000mm
+// Boiler spans Y from ~26 (hopper tip) to ~72 (separator top)
+// Center of model ≈ Y=50 (FL+50000)
+const FL = mm => mm / 1000;
+
+// ── ORBIT CONTROLS ────────────────────────────────────────────
+// theta: horizontal rotation, phi: vertical angle (0=top, PI/2=side)
+// Allow phi from near-top to near-bottom: 0.05 to PI-0.05
+const sph = { theta: 0.68, phi: 1.05, r: 75 };
+let isDrag = false, pm = { x:0, y:0 }, autoRot = false;
+
+// Target = center of boiler model
+const tgt = new THREE.Vector3(3, FL(50000), 0);
+const tgtTarget = tgt.clone();  // destination for smooth fly-to
+
+function updCam() {
+  camera.position.set(
+    tgt.x + sph.r * Math.sin(sph.phi) * Math.sin(sph.theta),
+    tgt.y + sph.r * Math.cos(sph.phi),
+    tgt.z + sph.r * Math.sin(sph.phi) * Math.cos(sph.theta)
+  );
+  camera.lookAt(tgt);
+}
+updCam();
+
+const cv = document.getElementById('c');
+cv.addEventListener('mousedown', e => { isDrag = true; pm = { x:e.clientX, y:e.clientY }; });
+window.addEventListener('mouseup', () => { isDrag = false; });
+window.addEventListener('mousemove', e => {
+  if (!isDrag) return;
+  sph.theta -= (e.clientX - pm.x) * 0.005;
+  // Full vertical range: 0.05 (near top) to PI-0.05 (near bottom)
+  sph.phi = Math.max(0.05, Math.min(Math.PI - 0.05, sph.phi + (e.clientY - pm.y) * 0.005));
+  pm = { x:e.clientX, y:e.clientY };
+  updCam();
+});
+cv.addEventListener('wheel', e => {
+  sph.r = Math.max(8, Math.min(150, sph.r + e.deltaY * 0.05));
+  updCam();
+}, { passive: true });
+// Touch
+let lt = null;
+cv.addEventListener('touchstart', e => { lt = { x:e.touches[0].clientX, y:e.touches[0].clientY }; }, { passive:true });
+cv.addEventListener('touchmove', e => {
+  if (!lt) return;
+  sph.theta -= (e.touches[0].clientX - lt.x) * 0.006;
+  sph.phi = Math.max(0.05, Math.min(Math.PI - 0.05, sph.phi + (e.touches[0].clientY - lt.y) * 0.006));
+  lt = { x:e.touches[0].clientX, y:e.touches[0].clientY };
+  updCam();
+}, { passive:true });
+
+// ── HELPERS ───────────────────────────────────────────────────
+function mkMat(hex, op, side) {
+  op   = (op   === undefined) ? 1              : op;
+  side = (side === undefined) ? THREE.FrontSide : side;
+  return new THREE.MeshPhongMaterial({
+    color: hex, opacity: op, transparent: op < 1,
+    depthWrite: op >= 0.8, side
+  });
+}
+
+// Add a box mesh with optional separate edge lines
+function addBox(w, h, d, mat, x, y, z, arr, edgeCol) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  mesh.position.set(x, y, z);
+  scene.add(mesh);
+  if (arr) arr.push(mesh);
+  if (edgeCol !== undefined) {
+    const el = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)),
+      new THREE.LineBasicMaterial({ color: edgeCol })
+    );
+    el.position.set(x, y, z);
+    scene.add(el);
+  }
+  return mesh;
+}
+
+// Add a diagonal quad panel (for nose slopes), extruded in Z
+function addDiagPanel(x1, y1, x2, y2, depth, col, op, arr) {
+  const hz = depth / 2;
+  const verts = new Float32Array([
+    x1,y1, hz,   x2,y2, hz,   x1,y1,-hz,
+    x2,y2, hz,   x2,y2,-hz,   x1,y1,-hz
+  ]);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, mkMat(col, op, THREE.DoubleSide));
+  scene.add(m);
+  if (arr) arr.push(m);
+  return m;
+}
+
+function mkSpriteTxt(txt, col) {
+  const c2 = document.createElement('canvas');
+  c2.width = 180; c2.height = 50;
+  const ctx = c2.getContext('2d');
+  ctx.fillStyle = 'rgba(20,20,18,0.80)';
+  ctx.beginPath(); ctx.roundRect(0,0,180,50,5); ctx.fill();
+  ctx.fillStyle = col || '#fff';
+  ctx.font = 'bold 11px IBM Plex Mono,monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const lines = txt.split('\n');
+  lines.forEach((l, i) => ctx.fillText(l, 90, 17 + i * 16));
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: new THREE.CanvasTexture(c2), depthTest: false
+  }));
+  sp.scale.set(2.8, 0.78, 1);
+  return sp;
+}
+
+// ── DIMENSIONS (all in units = 1000mm) ────────────────────────
+// From D-D drawing (plan at FL+44000), BOILER FRONT = top of drawing:
+// Horizontal in plan = front→rear (FD): 2121+2750+2750+2750+2750+2241 = 15362mm
+// Vertical in plan   = left→right (FW): 507+11049+528 = 12084mm
+const FW     = 12.084; // furnace width  left→right (12084mm) — SMALLER
+const FD     = 15.362; // furnace depth front→rear  (15362mm) — LARGER
+const FX_L   = -FW/2;  // left wall  X = -6.042
+const FX_R   =  FW/2;  // right wall X = +6.042
+const FZ_F   =  FD/2;  // front wall Z = +7.681
+const FZ_R   = -FD/2;  // rear wall  Z = -7.681
+const wkTk   = 0.25;   // wall thickness
+
+// Y elevations
+const Y_SEP_TOP = FL(74000);  // separator top
+const Y_TOP     = FL(70300);  // furnace/HRA top
+const Y_NOSE_T  = FL(63500);  // nose top
+const Y_NOSE_B  = FL(59000);  // nose bottom
+const Y_SCREEN  = FL(53100);  // screen wall / OAP-SAP
+const Y_FL44    = FL(44000);  // hopper top / furnace lower bottom
+const Y_HOP_TIP = FL(26000);  // hopper tip
+
+// Nose apex: indents ~4500mm from right wall into furnace
+const NOSE_APEX_X = FX_R - 4.5;   // 6.042 - 4.5 = 1.542
+const NOSE_MID_Y  = (Y_NOSE_T + Y_NOSE_B) / 2;
+
+// HRA: gap ~1500mm from furnace right wall, width 12200mm
+const HRA_XL = FX_R + 1.5;        // 6.042 + 1.5 = 7.542
+const HRA_XR = HRA_XL + 12.2;     // 7.542 + 12.2 = 19.742
+const HRA_CX = (HRA_XL + HRA_XR) / 2;
+const HRA_W  = HRA_XR - HRA_XL;   // 12.2
+const HRA_H  = Y_TOP - Y_FL44;
+const HRA_CY = (Y_TOP + Y_FL44) / 2;
+
+// ── MATERIAL SETS ─────────────────────────────────────────────
+const matLo = mkMat(0x3A7EBB, 0.22, THREE.DoubleSide);  // furnace lower (blue)
+const matUp = mkMat(0x20A8CC, 0.22, THREE.DoubleSide);  // furnace upper (cyan)
+const matHR = mkMat(0xC8A020, 0.22, THREE.DoubleSide);  // HRA (amber)
+
+const loWalls = [], upWalls = [], hraWallArr = [];
+
+// ── FURNACE BODY — single ExtrudeGeometry from exact 2D profile ──
+// The 2D profile (XY plane) matches the confirmed 2D drawing exactly:
+//
+//   Starting top-left, going CLOCKWISE (outer boundary):
+//   TL (FX_L, Y_TOP)
+//   TR (FX_R, Y_TOP)          ← top edge
+//   nose-top   (FX_R, Y_NOSE_T)       ← right wall down to nose top
+//   nose-apex  (NOSE_APEX_X, NOSE_MID_Y) ← diagonal in (◁ pointing left)
+//   nose-bot   (FX_R, Y_NOSE_B)       ← diagonal back out
+//   screen-R   (FX_R, Y_SCREEN)       ← right wall continues down
+//   lo-BR      (FX_R, Y_FL44)         ← bottom-right of lower furnace
+//   hop-R      (HOP_R, Y_HOP_TIP)     ← hopper right slant
+//   hop-L      (HOP_L, Y_HOP_TIP)     ← hopper bottom
+//   lo-BL      (FX_L, Y_FL44)         ← hopper left slant back up
+//   BL         (FX_L, Y_SCREEN)
+//   (FX_L, Y_TOP) → close
+//
+// This is extruded along Z = depth FD, centered at Z=0
+
+const LO_H  = Y_SCREEN - Y_FL44;  // kept for reference
+const LO_CY = (Y_FL44 + Y_SCREEN) / 2;
+const UP_H  = Y_NOSE_T - Y_SCREEN;
+const UP_CY = (Y_SCREEN + Y_NOSE_T) / 2;
+const NS_H  = Y_TOP - Y_NOSE_T;
+const NS_CY = (Y_NOSE_T + Y_TOP) / 2;
+const FULL_UP_H  = Y_TOP - Y_SCREEN;
+const FULL_UP_CY = (Y_SCREEN + Y_TOP) / 2;
+
+// Hopper taper: how far inward at the tip
+const HOP_TIP_W = 0.5;  // half-width at hopper tip
+const HOP_R = HOP_TIP_W;
+const HOP_L = -HOP_TIP_W;
+
+{
+  // ── FURNACE 2D SHAPE ──────────────────────────────────────
+  const sh = new THREE.Shape();
+  sh.moveTo(FX_L,          Y_TOP);        // top-left furnace
+  sh.lineTo(HRA_XR,        Y_TOP);        // top extends all the way to HRA right (shared roof)
+  sh.lineTo(HRA_XR,        Y_NOSE_T);     // HRA right wall down to nose level
+  sh.lineTo(HRA_XL,        Y_NOSE_T);     // HRA bottom of passage (nose level)
+  sh.lineTo(FX_R,          Y_NOSE_T);     // back to furnace right wall at nose top
+  sh.lineTo(NOSE_APEX_X,   NOSE_MID_Y);   // nose apex (◁ lõm vào trái)
+  sh.lineTo(FX_R,          Y_NOSE_B);     // nose bottom
+  sh.lineTo(FX_R,          Y_FL44);       // right wall → hopper top
+  sh.lineTo(HOP_R,         Y_HOP_TIP);    // hopper right slant
+  sh.lineTo(HOP_L,         Y_HOP_TIP);    // hopper bottom (narrow)
+  sh.lineTo(FX_L,          Y_FL44);       // hopper left slant back up
+  sh.closePath();                          // back to top-left
+
+  // Extrude along Z with wall thickness bevel = 0
+  const tk   = wkTk;
+  const extG = new THREE.ExtrudeGeometry(sh, {
+    depth: FD,
+    bevelEnabled: false,
+  });
+
+  // Solid fill (semi-transparent)
+  const fillMat = new THREE.MeshPhongMaterial({
+    color: 0x5AAAD8,
+    opacity: 0.18,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+  const fillM = new THREE.Mesh(extG, fillMat);
+  fillM.position.set(0, 0, -FD/2);
+  scene.add(fillM);
+  loWalls.push(fillM);
+  upWalls.push(fillM);
+
+  // Edge outline — shows the profile clearly
+  const eGeo = new THREE.EdgesGeometry(extG);
+  const eL   = new THREE.LineSegments(
+    eGeo,
+    new THREE.LineBasicMaterial({ color: 0x1A5080, linewidth: 1 })
+  );
+  eL.position.set(0, 0, -FD/2);
+  scene.add(eL);
+}
+
+// Hopper is now part of the main furnace ExtrudeGeometry above
+const HOP_H  = Y_FL44 - Y_HOP_TIP;
+const HOP_CY = (Y_HOP_TIP + Y_FL44) / 2;
+
+// ── HRA body — ExtrudeGeometry từ profile 2D ─────────────────
+// HRA profile (XY plane), kết nối với furnace:
+//   - Trái trên: từ FX_R (tường phải furnace) → HRA_XR  tại Y_TOP  (shared top)
+//   - Phải: HRA_XR xuống Y_FL44
+//   - Dưới: HRA_XR → HRA_XL tại Y_FL44
+//   - Trái: HRA_XL lên đến Y_NOSE_T (thông với furnace tại nose level)
+//   - Kết nối nose: HRA_XL, Y_NOSE_T → FX_R, Y_NOSE_T  (duct thông furnace)
+//   - Furnace right wall từ Y_NOSE_T lên Y_TOP: đã là tường furnace
+//
+// Về cơ bản HRA là hộp với:
+//   - KHÔNG có tường trái từ Y_NOSE_T đến Y_TOP (thông với furnace)
+//   - KHÔNG có tường trên (thông qua furnace top)
+//   - CÓ tường trái từ Y_FL44 đến Y_NOSE_T
+{
+  const sh = new THREE.Shape();
+  // Bắt đầu từ điểm kết nối với furnace nose, đi clockwise:
+  sh.moveTo(HRA_XL, Y_NOSE_T);   // trái, tại nose level
+  sh.lineTo(HRA_XL, Y_FL44);     // trái xuống đáy
+  sh.lineTo(HRA_XR, Y_FL44);     // đáy HRA
+  sh.lineTo(HRA_XR, Y_TOP);      // phải lên đỉnh
+  sh.lineTo(FX_R,   Y_TOP);      // nối sang furnace top-right
+  sh.lineTo(FX_R,   Y_NOSE_T);   // xuống tới nose top (tường furnace)
+  sh.closePath();                  // về HRA_XL, Y_NOSE_T
+
+  const hraExtG = new THREE.ExtrudeGeometry(sh, { depth: FD, bevelEnabled: false });
+  const hraFill = new THREE.Mesh(hraExtG, new THREE.MeshPhongMaterial({
+    color: 0xD4A820, opacity: 0.18, transparent: true,
+    side: THREE.DoubleSide, depthWrite: false
+  }));
+  hraFill.position.set(0, 0, -FD/2);
+  scene.add(hraFill);
+  hraWallArr.push(hraFill);
+
+  // Edge outline HRA
+  const hraEdge = new THREE.LineSegments(
+    new THREE.EdgesGeometry(hraExtG),
+    new THREE.LineBasicMaterial({ color: 0xA87A10 })
+  );
+  hraEdge.position.set(0, 0, -FD/2);
+  scene.add(hraEdge);
+
+  // Tường trái HRA (từ Y_FL44 → Y_NOSE_T, là phần KHÔNG thông với furnace)
+  addBox(wkTk, Y_NOSE_T - Y_FL44, FD, matHR,
+    HRA_XL, (Y_FL44 + Y_NOSE_T)/2, 0, hraWallArr);
+  // Tường phải HRA
+  addBox(wkTk, HRA_H, FD, matHR, HRA_XR, HRA_CY, 0, hraWallArr);
+  // Tường dưới HRA
+  addBox(HRA_W, wkTk, FD, matHR, HRA_CX, Y_FL44, 0, hraWallArr);
+}
+
+// HRA heat exchanger tube banks (4 banks)
+const banks = [
+  { y: HRA_CY + HRA_H*0.36, h: FL(5500), col: 0xCC44AA, rows: 5 },  // Pri.SH
+  { y: HRA_CY + HRA_H*0.12, h: FL(4500), col: 0x66BB22, rows: 4 },  // RH
+  { y: HRA_CY - HRA_H*0.12, h: FL(4000), col: 0xE070A0, rows: 4 },  // Sec.ECO
+  { y: HRA_CY - HRA_H*0.36, h: FL(5000), col: 0x33AA44, rows: 5 },  // Pri.ECO
+];
+banks.forEach(b => {
+  for (let t = 0; t < b.rows; t++) {
+    const sm = new THREE.Mesh(
+      new THREE.BoxGeometry(HRA_W * 0.80, FL(180), FL(350)),
+      mkMat(b.col, 0.65)
+    );
+    sm.position.set(HRA_CX, b.y - b.h/2 + t*(b.h/(b.rows-1)), -FD*0.28 + t*FL(650));
+    scene.add(sm);
+  }
+});
+
+// ── FURNACE INTERMEDIATE HEADERS (FL+53100) ──────────────────
+// 4 headers: left, right, front, rear — tại FL+53100
+{
+  const HDR_R   = FL(350);
+  const HDR_Y   = Y_SCREEN;
+  const HDR_MAT = new THREE.MeshPhongMaterial({ color: 0x607080, shininess: 60 });
+  const HDR_SEG = 24;
+
+  function addHdr(len, rotX, rotZ, px, py, pz) {
+    const geo  = new THREE.CylinderGeometry(HDR_R, HDR_R, len, HDR_SEG);
+    const mesh = new THREE.Mesh(geo, HDR_MAT.clone());
+    if (rotX) mesh.rotation.x = rotX;
+    if (rotZ) mesh.rotation.z = rotZ;
+    mesh.position.set(px, py, pz);
+    scene.add(mesh);
+    const edge = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.CylinderGeometry(HDR_R, HDR_R, len, HDR_SEG)),
+      new THREE.LineBasicMaterial({ color: 0x334455 })
+    );
+    if (rotX) edge.rotation.x = rotX;
+    if (rotZ) edge.rotation.z = rotZ;
+    edge.position.set(px, py, pz);
+    scene.add(edge);
+  }
+
+  // LEFT wall header  — chạy theo Z (front→rear)
+  addHdr(FD*0.95, Math.PI/2, 0,  FX_L - FL(400), HDR_Y, 0);
+  // RIGHT wall header — chạy theo Z
+  addHdr(FD*0.95, Math.PI/2, 0,  FX_R + FL(400), HDR_Y, 0);
+  // FRONT wall header — chạy theo X (left→right)
+  addHdr(FW*0.95, 0, Math.PI/2,  0, HDR_Y, FZ_F + FL(400));
+  // REAR wall header  — chạy theo X
+  addHdr(FW*0.95, 0, Math.PI/2,  0, HDR_Y, FZ_R - FL(400));
+}
+
+// ── SECONDARY SUPERHEATER PENDANTS ───────────────────────────
+// 8 tấm SSH: mỗi tấm gồm 1 ống góp nằm ngang + 30 ống nhỏ treo xuống
+const SSH_PANEL_PARAMS = { zPositions: [], cx: 0, topY: 0 };
+{
+  const panelD  = FW * 0.40;                              // chiều rộng tấm theo X (~4.8m)
+  const panelH  = FL(8000);                               // chiều cao tấm
+  const panelY  = (Y_SCREEN + Y_TOP) / 2 + FL(2500);     // tâm Y tấm
+  const panelCX = FX_L + panelD / 2 + FL(1500);
+
+  const HDR_R  = FL(300);   // bán kính ống góp 300mm
+  const TUBE_R = FL(28);    // bán kính ống nhỏ 28mm
+  const N_TUBE = 30;
+
+  const Y_hdr    = panelY + panelH / 2 - HDR_R;          // tâm Y ống góp
+  const Y_bot    = panelY - panelH / 2;                   // đáy tấm
+  const tubeH    = Y_hdr - HDR_R - Y_bot;                 // chiều dài ống nhỏ
+  const Y_tubeCY = (Y_hdr - HDR_R + Y_bot) / 2;          // tâm Y ống nhỏ
+
+  const matHdr  = new THREE.MeshPhongMaterial({ color: 0xCC5500, shininess: 70 });
+  const matTube = new THREE.MeshPhongMaterial({ color: 0xDD7010, shininess: 30 });
+  const hdrGeo  = new THREE.CylinderGeometry(HDR_R, HDR_R, panelD, 20);
+  const hdrEdGeo = new THREE.EdgesGeometry(hdrGeo);
+  const tubeGeo = new THREE.CylinderGeometry(TUBE_R, TUBE_R, tubeH, 6);
+
+  SSH_PANEL_PARAMS.cx   = panelCX;
+  SSH_PANEL_PARAMS.topY = Y_hdr + HDR_R + FL(200);
+
+  const zPositions = evenSpread(8, FZ_R, FZ_F);
+  zPositions.forEach(z => {
+    SSH_PANEL_PARAMS.zPositions.push(z);
+
+    // Ống góp nằm ngang (chạy theo X)
+    const hdr = new THREE.Mesh(hdrGeo, matHdr.clone());
+    hdr.rotation.z = Math.PI / 2;
+    hdr.position.set(panelCX, Y_hdr, z);
+    scene.add(hdr);
+    const hdrEl = new THREE.LineSegments(
+      hdrEdGeo,
+      new THREE.LineBasicMaterial({ color: 0x993300 })
+    );
+    hdrEl.rotation.z = Math.PI / 2;
+    hdrEl.position.set(panelCX, Y_hdr, z);
+    scene.add(hdrEl);
+
+    // 30 ống nhỏ treo từ ống góp xuống, phân bố đều theo X
+    const xStep = panelD / (N_TUBE + 1);
+    for (let t = 0; t < N_TUBE; t++) {
+      const tx = panelCX - panelD / 2 + xStep * (t + 1);
+      const tube = new THREE.Mesh(tubeGeo, matTube);
+      tube.position.set(tx, Y_tubeCY, z);
+      scene.add(tube);
+    }
+  });
+}
+
+
+// ── SEPARATOR DRUM ────────────────────────────────────────────
+const sepGeo  = new THREE.CylinderGeometry(FL(1100), FL(1100), FL(4000), 32);
+const sepMesh = new THREE.Mesh(sepGeo, mkMat(0x44AA44, 0.75));
+sepMesh.position.set(FX_L + FL(2000), Y_TOP + FL(2500), 0);
+scene.add(sepMesh);
+const sepEdge = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.CylinderGeometry(FL(1100), FL(1100), FL(4000), 32)),
+  new THREE.LineBasicMaterial({ color: 0x2E7D32 })
+);
+sepEdge.position.set(FX_L + FL(2000), Y_TOP + FL(2500), 0);
+scene.add(sepEdge);
+
+// Drain tank
+const dtMesh = new THREE.Mesh(
+  new THREE.CylinderGeometry(FL(550), FL(550), FL(2000), 16),
+  mkMat(0x44AA44, 0.70)
+);
+dtMesh.position.set(FX_L + FL(500), Y_TOP + FL(1500), FL(2000));
+scene.add(dtMesh);
+
+// FSH outlet header
+const fshH = new THREE.Mesh(
+  new THREE.CylinderGeometry(FL(650), FL(650), FD * 0.85, 24),
+  mkMat(0xDD3A18, 0.80)
+);
+fshH.rotation.x = Math.PI / 2;
+fshH.position.set(FL(1500), Y_TOP + FL(1400), 0);
+scene.add(fshH);
+const fshHEdge = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.CylinderGeometry(FL(650), FL(650), FD*0.85, 24)),
+  new THREE.LineBasicMaterial({ color: 0xAA2800 })
+);
+fshHEdge.rotation.x = Math.PI / 2;
+fshHEdge.position.set(FL(1500), Y_TOP + FL(1400), 0);
+scene.add(fshHEdge);
+
+// RH outlet header
+const rhH = new THREE.Mesh(
+  new THREE.CylinderGeometry(FL(650), FL(650), FD * 0.85, 24),
+  mkMat(0x2050CC, 0.80)
+);
+rhH.rotation.x = Math.PI / 2;
+rhH.position.set(HRA_CX, Y_TOP + FL(1400), 0);
+scene.add(rhH);
+
+// ── TC SENSORS — FURNACE LOWER WALL (on intermediate header FL+53100) ──
+// Positions from D-D drawing
+// TCs nằm TRÊN tường furnace (trên intermediate header một chút)
+// Y = Y_SCREEN + offset nhỏ để nằm trên header
+const TC_Y   = Y_SCREEN + FL(350 + 200);  // above header surface: radius(350) + 200mm gap
+
+// Chia đều theo chiều dài mỗi tường
+// Left/Right wall: 8 TCs chia đều trên FD (front→rear)
+// Front/Rear wall: 5 TCs chia đều trên FW (left→right)
+
+function evenSpread(n, lo, hi) {
+  // Trả về n điểm chia đều từ lo đến hi (không tính endpoint)
+  const step = (hi - lo) / (n + 1);
+  return Array.from({length: n}, (_, i) => lo + step * (i + 1));
+}
+
+const zPos8 = evenSpread(8, FZ_R, FZ_F);  // 8 TCs trên Left/Right wall (Z axis)
+const xPos5 = evenSpread(5, FX_L, FX_R);  // 5 TCs trên Front/Rear wall (X axis)
+
+const TC_DATA = [
+  // FRONT wall (X=FX_L): wall name = 'Left'
+  { kks:'10HAD10CT001', wall:'Front', x:FX_L, z: zPos8[7] },
+  { kks:'10HAD10CT002', wall:'Front', x:FX_L, z: zPos8[6] },
+  { kks:'10HAD10CT003', wall:'Front', x:FX_L, z: zPos8[5] },
+  { kks:'10HAD10CT004', wall:'Front', x:FX_L, z: zPos8[4] },
+  { kks:'10HAD10CT005', wall:'Front', x:FX_L, z: zPos8[3] },
+  { kks:'10HAD10CT006', wall:'Front', x:FX_L, z: zPos8[2] },
+  { kks:'10HAD10CT007', wall:'Front', x:FX_L, z: zPos8[1] },
+  { kks:'10HAD10CT008', wall:'Front', x:FX_L, z: zPos8[0] },
+  // REAR wall (X=FX_R)
+  { kks:'10HAD10CT009', wall:'Rear',  x:FX_R, z: zPos8[7] },
+  { kks:'10HAD10CT010', wall:'Rear',  x:FX_R, z: zPos8[6] },
+  { kks:'10HAD10CT011', wall:'Rear',  x:FX_R, z: zPos8[5] },
+  { kks:'10HAD10CT012', wall:'Rear',  x:FX_R, z: zPos8[4] },
+  { kks:'10HAD10CT013', wall:'Rear',  x:FX_R, z: zPos8[3] },
+  { kks:'10HAD10CT014', wall:'Rear',  x:FX_R, z: zPos8[2] },
+  { kks:'10HAD10CT015', wall:'Rear',  x:FX_R, z: zPos8[1] },
+  { kks:'10HAD10CT016', wall:'Rear',  x:FX_R, z: zPos8[0] },
+  // LEFT wall: CT017 ở Left(xPos5[0]) → CT021 ở Right(xPos5[4])
+  { kks:'10HAD10CT017', wall:'Left',  x:xPos5[0], z:FZ_F },
+  { kks:'10HAD10CT018', wall:'Left',  x:xPos5[1], z:FZ_F },
+  { kks:'10HAD10CT019', wall:'Left',  x:xPos5[2], z:FZ_F },
+  { kks:'10HAD10CT020', wall:'Left',  x:xPos5[3], z:FZ_F },
+  { kks:'10HAD10CT021', wall:'Left',  x:xPos5[4], z:FZ_F },
+  // RIGHT wall: CT022 ở Left(xPos5[0]) → CT026 ở Right(xPos5[4])
+  { kks:'10HAD10CT022', wall:'Right', x:xPos5[0], z:FZ_R },
+  { kks:'10HAD10CT023', wall:'Right', x:xPos5[1], z:FZ_R },
+  { kks:'10HAD10CT024', wall:'Right', x:xPos5[2], z:FZ_R },
+  { kks:'10HAD10CT025', wall:'Right', x:xPos5[3], z:FZ_R },
+  { kks:'10HAD10CT026', wall:'Right', x:xPos5[4], z:FZ_R },
+];
+
+const tcMeshes = [];
+const tcGroup  = new THREE.Group();
+scene.add(tcGroup);
+
+const DOT_R  = FL(180);
+const matDot = new THREE.MeshPhongMaterial({ color: 0xE84040, emissive: 0xC82020, emissiveIntensity: 0.4 });
+
+TC_DATA.forEach((tc, idx) => {
+  const geo  = new THREE.SphereGeometry(DOT_R, 10, 8);
+  const mesh = new THREE.Mesh(geo, matDot.clone());
+  // TC sits directly above the header at same X,Z, Y+200mm
+  mesh.position.set(tc.x, TC_Y, tc.z);
+  mesh.userData = { kks: tc.kks, wall: tc.wall, idx };
+  tcGroup.add(mesh);
+  tcMeshes.push(mesh);
+
+  // Vertical line connecting TC dot down to header surface
+  const linePts = [
+    new THREE.Vector3(tc.x, TC_Y - DOT_R, tc.z),   // bottom of dot
+    new THREE.Vector3(tc.x, Y_SCREEN,     tc.z),    // top of header
+  ];
+  const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+  const line = new THREE.Line(
+    lineGeo,
+    new THREE.LineBasicMaterial({ color: 0xE84040, opacity: 0.7, transparent: true })
+  );
+  tcGroup.add(line);
+});
+
+// ── RAYCASTING + TOOLTIP ──────────────────────────────────────
+const rc2  = new THREE.Raycaster();
+const mp   = new THREE.Vector2();
+const tip  = document.getElementById('tc-tip');
+let selIdx = -1;
+
+cv.addEventListener('mousemove', e => {
+  const rect = cv.getBoundingClientRect();
+  mp.x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+  mp.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+  rc2.setFromCamera(mp, camera);
+  const hits = rc2.intersectObjects(tcMeshes);
+  if (hits.length) {
+    const d = hits[0].object.userData;
+    tip.textContent = d.kks + ' (' + d.wall + (d.noWallSuffix ? '' : ' wall') + ')';
+    tip.style.left  = (e.clientX + 14) + 'px';
+    tip.style.top   = (e.clientY - 8) + 'px';
+    tip.classList.add('show');
+    cv.style.cursor = 'pointer';
+  } else {
+    tip.classList.remove('show');
+    cv.style.cursor = 'default';
+  }
+});
+
+cv.addEventListener('click', e => {
+  const rect = cv.getBoundingClientRect();
+  mp.x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+  mp.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+  rc2.setFromCamera(mp, camera);
+  const hits = rc2.intersectObjects(tcMeshes);
+  if (hits.length) {
+    const d = hits[0].object.userData;
+    selectTC(d.idx);
+  }
+});
+
+function selectTC(idx) {
+  const loCount  = TC_DATA.length;
+  const upCount  = window.UP_TC_DATA_REF ? window.UP_TC_DATA_REF.length : 0;
+  const sshStart = loCount + upCount;
+  // Reset all dots to original color
+  tcMeshes.forEach((m, i) => {
+    let origCol, origEmi;
+    if (i < loCount)       { origCol = 0xE84040; origEmi = 0xC82020; }
+    else if (i < sshStart) { origCol = 0x2266DD; origEmi = 0x1144AA; }
+    else                   { origCol = 0xFF8800; origEmi = 0xDD6600; }
+    m.material.color.setHex(i === idx ? 0xFFD700 : origCol);
+    m.material.emissive.setHex(i === idx ? 0xFFAA00 : origEmi);
+  });
+  selIdx = idx;
+  document.querySelectorAll('.tc-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+    if (i === idx) el.scrollIntoView({ block: 'nearest' });
+  });
+  const pos = tcMeshes[idx].position;
+  tgtTarget.set(pos.x, pos.y, pos.z);
+}
+
+// ── SIDEBAR LIST (declare early, used by both lower and upper TC blocks) ──
+const list = document.getElementById('tc-list');
+
+// ── TC SENSORS — FURNACE UPPER WALL ──────────────────────────
+// From B-B plan view (BOILER FRONT = top-left of drawing):
+// Horizontal axis B-B = front→rear = Z axis in 3D
+// Vertical axis B-B   = left→right = X axis in 3D
+//
+// 10HAD23CT001~005: TOP row    → FRONT wall (Z=FZ_F), X varies, tube#40,90,140,190,240
+// 10HAD22CT001~005: BOTTOM row → REAR wall  (Z=FZ_R), X varies, tube#40,90,140,190,240
+// 10HAD21CT001~008: LEFT col   → LEFT wall  (X=FX_L), Z varies, tube#443(rear)→10(front)
+{
+  const TP_UP   = FL(63.5);
+  const Y_UP_TC = Y_TOP - FL(1000);  // FL+69300
+  const OFF_UP  = FL(150);
+
+  // LEFT wall (X=FX_L): 8 TCs, tube# counted from FRONT wall inward
+  // CT001=#443 (near rear), CT008=#10 (near front)
+  const leftTubes = [443, 389, 324, 259, 194, 129, 64, 10];
+
+  // FRONT/REAR wall: tube# counted from LEFT wall
+  const frTubes = [40, 90, 140, 190, 240];
+
+  const UP_TC_DATA = [
+    // 10HAD21CT001~008: LEFT side of B-B → X=FX_L, distributed along Z (front→rear)
+    // tube#443=bottom(rear)→#10=top(front): CT001 near rear, CT008 near front
+    ...evenSpread(8, FZ_R, FZ_F).map((z, i) => ({
+      kks: '10HAD21CT' + String(8-i).padStart(3,'0'),
+      wall: 'Front', x: FX_L, z
+    })),
+    // 10HAD23CT001~005: BOTTOM row → Z=FZ_R, distributed along X
+    ...evenSpread(5, FX_L, FX_R).map((x, i) => ({
+      kks: '10HAD23CT' + String(i+1).padStart(3,'0'),
+      wall: 'Left', x, z: FZ_R
+    })),
+    // 10HAD22CT001~005: TOP row → Z=FZ_F, distributed along X
+    ...evenSpread(5, FX_L, FX_R).map((x, i) => ({
+      kks: '10HAD22CT' + String(i+1).padStart(3,'0'),
+      wall: 'Right', x, z: FZ_F
+    })),
+    // 10HAD24CT001~008: Furnace upper REAR wall — on right wall (X=FX_R), along Z, lower Y
+    ...evenSpread(8, FZ_R, FZ_F).map((z, i) => ({
+      kks: '10HAD24CT' + String(i+1).padStart(3,'0'),
+      wall: 'Rear', x: FX_R, y: Y_UP_TC - FL(6000), z
+    })),
+    // 10HAD25CT001~007: Furnace upper REAR wall screen — slightly inside from right wall
+    ...evenSpread(7, FZ_R, FZ_F).map((z, i) => ({
+      kks: '10HAD25CT' + String(i+1).padStart(3,'0'),
+      wall: 'Rear Screen', x: FX_R, z
+    })),
+  ];
+
+  window.UP_TC_DATA_REF = UP_TC_DATA;
+  const matUpTC = new THREE.MeshPhongMaterial({ color: 0x2266DD, emissive: 0x1144AA, emissiveIntensity: 0.4 });
+  const DOT_UP  = FL(200);
+
+  UP_TC_DATA.forEach((tc, i) => {
+    const geo  = new THREE.SphereGeometry(DOT_UP, 10, 8);
+    const mesh = new THREE.Mesh(geo, matUpTC.clone());
+    // Sit exactly on the wall surface — no offset
+    mesh.position.set(tc.x, tc.y !== undefined ? tc.y : Y_UP_TC, tc.z);
+    mesh.userData = { kks: tc.kks, wall: tc.wall, idx: tcMeshes.length };
+    tcGroup.add(mesh);
+    tcMeshes.push(mesh);
+  });
+
+}
+
+// ── SSH TC SENSORS (10HAH50CT001~008) — từ right (FZ_R, idx 0) → left (FZ_F, idx 7) ──
+const SSH_TC_DATA = SSH_PANEL_PARAMS.zPositions.map((z, i) => ({
+  kks:  '10HAH50CT' + String(8 - i).padStart(3, '0'),
+  wall: 'SSH P' + (i + 1) + ' #16' ,
+  x: SSH_PANEL_PARAMS.cx + FL(1500),
+  y: SSH_PANEL_PARAMS.topY - FL(1000),
+  z,
+}));
+window.SSH_TC_DATA_REF = SSH_TC_DATA;
+
+{
+  const matSSH  = new THREE.MeshPhongMaterial({ color: 0xFF8800, emissive: 0xDD6600, emissiveIntensity: 0.4 });
+  const DOT_SSH = FL(180);
+
+  SSH_TC_DATA.forEach(tc => {
+    const geo  = new THREE.SphereGeometry(DOT_SSH, 10, 8);
+    const mesh = new THREE.Mesh(geo, matSSH.clone());
+    mesh.position.set(tc.x, tc.y, tc.z);
+    mesh.userData = { kks: tc.kks, wall: tc.wall, noWallSuffix: true, idx: tcMeshes.length };
+    tcGroup.add(mesh);
+    tcMeshes.push(mesh);
+
+    const linePts = [
+      new THREE.Vector3(tc.x, tc.y - DOT_SSH, tc.z),
+      new THREE.Vector3(tc.x, tc.y - FL(400),  tc.z),
+    ];
+    tcGroup.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(linePts),
+      new THREE.LineBasicMaterial({ color: 0xFF8800, opacity: 0.7, transparent: true })
+    ));
+  });
+}
+
+// ── SIDEBAR: Lower first (index 0~25), then Upper (index 26+) ──
+// Lower wall separator
+{ const s=document.createElement('div');
+  s.style.cssText='padding:5px 12px;font-size:9px;font-family:var(--mono);color:var(--txt3);background:var(--bg);border-bottom:1px solid var(--bdr);letter-spacing:.08em;text-transform:uppercase';
+  s.textContent='Lower Furnace Wall TC'; list.appendChild(s); }
+
+TC_DATA.forEach((tc, idx) => {
+  const el = document.createElement('div');
+  el.className = 'tc-item';
+  el.innerHTML = '<span class="tc-dot"></span><span class="tc-kks">' + tc.kks + '</span><span class="tc-wall">' + tc.wall + '</span>';
+  el.addEventListener('click', () => selectTC(idx));
+  list.appendChild(el);
+});
+
+// Upper wall separator
+{ const s=document.createElement('div');
+  s.style.cssText='padding:5px 12px;font-size:9px;font-family:var(--mono);color:var(--txt3);background:var(--bg);border-bottom:1px solid var(--bdr);letter-spacing:.08em;text-transform:uppercase';
+  s.textContent='Upper Furnace Wall TC'; list.appendChild(s); }
+
+{ const baseIdx = TC_DATA.length;
+  window.UP_TC_DATA_REF.forEach((tc, i) => {
+    const el = document.createElement('div');
+    el.className = 'tc-item';
+    el.innerHTML = '<span class="tc-dot" style="background:#2266DD"></span><span class="tc-kks">' + tc.kks + '</span><span class="tc-wall">' + tc.wall + '</span>';
+    el.addEventListener('click', () => selectTC(baseIdx + i));
+    list.appendChild(el);
+  });
+}
+
+// SSH TC separator
+{ const s = document.createElement('div');
+  s.style.cssText = 'padding:5px 12px;font-size:9px;font-family:var(--mono);color:var(--txt3);background:var(--bg);border-bottom:1px solid var(--bdr);letter-spacing:.08em;text-transform:uppercase';
+  s.textContent = 'Secondary SH TC · HAH50';
+  list.appendChild(s);
+}
+
+{ const baseIdx = TC_DATA.length + window.UP_TC_DATA_REF.length;
+  window.SSH_TC_DATA_REF.forEach((tc, i) => {
+    const el = document.createElement('div');
+    el.className = 'tc-item';
+    el.innerHTML = '<span class="tc-dot" style="background:#FF8800"></span><span class="tc-kks">' + tc.kks + '</span><span class="tc-wall">' + tc.wall + '</span>';
+    el.addEventListener('click', () => selectTC(baseIdx + i));
+    list.appendChild(el);
+  });
+}
+
+// ── FLOOR GRID ────────────────────────────────────────────────
+scene.add(new THREE.GridHelper(120, 60, 0xCCCABE, 0xDDDDD0));
+
+// ── TRỤC TỌA ĐỘ XYZ ──────────────────────────────────────────
+{
+  const axisLen = 15;
+  const axisW   = 3;
+
+  // X axis — đỏ (Front→Rear)
+  const xGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0,0,0), new THREE.Vector3(axisLen,0,0)
+  ]);
+  scene.add(new THREE.Line(xGeo, new THREE.LineBasicMaterial({color:0xFF2020, linewidth:axisW})));
+
+  // Z axis — xanh lá (Left→Right)
+  const zGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,axisLen)
+  ]);
+  scene.add(new THREE.Line(zGeo, new THREE.LineBasicMaterial({color:0x20CC20, linewidth:axisW})));
+
+  // Y axis — xanh dương (lên trên)
+  const yGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0,0,0), new THREE.Vector3(0,axisLen,0)
+  ]);
+  scene.add(new THREE.Line(yGeo, new THREE.LineBasicMaterial({color:0x2060FF, linewidth:axisW})));
+
+  // Mũi tên đầu trục X
+  const xArr = new THREE.Mesh(
+    new THREE.ConeGeometry(0.3, 1.0, 8),
+    new THREE.MeshBasicMaterial({color:0xFF2020})
+  );
+  xArr.rotation.z = -Math.PI/2;
+  xArr.position.set(axisLen + 0.5, 0, 0);
+  scene.add(xArr);
+
+  // Mũi tên đầu trục Z
+  const zArr = new THREE.Mesh(
+    new THREE.ConeGeometry(0.3, 1.0, 8),
+    new THREE.MeshBasicMaterial({color:0x20CC20})
+  );
+  zArr.rotation.x = Math.PI/2;
+  zArr.position.set(0, 0, axisLen + 0.5);
+  scene.add(zArr);
+
+  // Mũi tên đầu trục Y
+  const yArr = new THREE.Mesh(
+    new THREE.ConeGeometry(0.3, 1.0, 8),
+    new THREE.MeshBasicMaterial({color:0x2060FF})
+  );
+  yArr.position.set(0, axisLen + 0.5, 0);
+  scene.add(yArr);
+
+  // Điểm gốc O
+  const origin = new THREE.Mesh(
+    new THREE.SphereGeometry(0.4, 12, 8),
+    new THREE.MeshBasicMaterial({color:0xFFFFFF})
+  );
+  scene.add(origin);
+
+  // Labels X Y Z
+  function axisLabel(txt, col, pos) {
+    const c2 = document.createElement('canvas');
+    c2.width = 64; c2.height = 64;
+    const ctx = c2.getContext('2d');
+    ctx.fillStyle = col;
+    ctx.font = 'bold 48px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(txt, 32, 32);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(c2), depthTest: false
+    }));
+    sp.scale.set(2, 2, 1);
+    sp.position.copy(pos);
+    scene.add(sp);
+  }
+  axisLabel('X', '#FF4040', new THREE.Vector3(axisLen+1.5, 0, 0));
+  axisLabel('Z', '#20CC20', new THREE.Vector3(0, 0, axisLen+1.5));
+  axisLabel('Y', '#4080FF', new THREE.Vector3(0, axisLen+1.5, 0));
+  axisLabel('O', '#FFFFFF', new THREE.Vector3(-1.2, 0, -1.2));
+}
+
+// ── CONTROLS ─────────────────────────────────────────────────
+let wMode = 0;
+const wOps  = [[0.22, 0.20], [0.55, 0.45], [0, 0]];
+const wLbls = ['Transp', 'Solid', 'Hidden'];
+
+function setCam(v) {
+  // Model center Y ≈ FL(50000) = 50, total height ~70-26=44 units
+  // Place target at middle of boiler body
+  const maps = {
+    iso:   { theta: 0.68,          phi: 1.05,       r: 75 },
+    front: { theta: -Math.PI/2,    phi: Math.PI/2,  r: 75 }, // camera phía -X, nhìn theo +X (Front→Rear)
+    side:  { theta: 0,             phi: Math.PI/2,  r: 75 }, // camera phía +Z, nhìn theo -Z (Left→Right)
+    top:   { theta: 0.68,          phi: 0.15,       r: 80 },
+  };
+  if (maps[v]) { Object.assign(sph, maps[v]); updCam(); }
+}
+function togW() {
+  wMode = (wMode + 1) % 3;
+  document.getElementById('wb').textContent = '◻ Walls: ' + wLbls[wMode];
+  const lo = wOps[wMode][0], hr = wOps[wMode][1];
+  loWalls.forEach(m => { if (m.material) { m.material.opacity = lo; m.material.transparent = lo < 1; } });
+  upWalls.forEach(m => { if (m.material) { m.material.opacity = lo; m.material.transparent = lo < 1; } });
+  hraWallArr.forEach(m => { if (m.material) { m.material.opacity = hr; m.material.transparent = hr < 1; } });
+}
+function togR() {
+  autoRot = !autoRot;
+  document.getElementById('rb').classList.toggle('on', autoRot);
+}
+
+// ── RENDER LOOP ───────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  if (autoRot) { sph.theta += 0.004; }
+  // Smooth fly-to: lerp tgt toward tgtTarget
+  tgt.lerp(tgtTarget, 0.08);
+  updCam();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = W() / H();
+  camera.updateProjectionMatrix();
+  renderer.setSize(W(), H());
+});
+
+window.APP = { setCam, togW, togR };
+})();
+</script>
+</body>
+</html>

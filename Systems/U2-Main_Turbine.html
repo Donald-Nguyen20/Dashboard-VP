@@ -42,14 +42,14 @@
             --panel: #ffffff;
             --panel2: #f4f7fb;
             --border: #c8d8ec;
-            --accent: #0077aa;
-            --accent2: #00875a;
-            --warn: #c97000;
-            --danger: #cc2020;
-            --ok: #007a44;
-            --dim: #a0b8d0;
-            --text: #1a2a3a;
-            --text2: #5a7a9a;
+            --accent: #003070;
+            --accent2: #005c30;
+            --warn: #b05800;
+            --danger: #b81818;
+            --ok: #006030;
+            --dim: #5a7898;
+            --text: #0d1a27;
+            --text2: #1e3a58;
             --grid: rgba(0, 100, 160, 0.05);
             --glow: 0 0 8px rgba(0, 120, 180, 0.2);
             --glow-red: 0 0 8px rgba(200, 30, 30, 0.3);
@@ -1204,6 +1204,96 @@
 
         html.light .fault-body {
             background: var(--panel2);
+        }
+
+        /* ── Section titles & headings (light mode) ── */
+        html.light .section-title {
+            color: #003070;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 3px;
+            border-bottom-color: #80aad0;
+        }
+        html.light .panel-label,
+        html.light .card-title,
+        html.light .sub-title { color: #003070; font-weight: 700; }
+
+        /* Inline "▸ ..." header divs dùng var(--text2) */
+        html.light [style*="color:var(--text2)"],
+        html.light [style*="color: var(--text2)"] {
+            color: #071828 !important;
+            font-weight: 600 !important;
+        }
+
+        /* ── SVG general text — darker on light bg ── */
+        html.light .train-svg text[fill="#3a6080"]  { fill: #0d2a40; }
+        html.light .train-svg text[fill="#3a6888"]  { fill: #0d3050; }
+        html.light .train-svg text[fill="#4a88b8"]  { fill: #0a4880; }
+        html.light .train-svg text[fill="#5090b8"]  { fill: #0a4070; }
+        html.light .train-svg text[fill="#6a90b8"]  { fill: #0a4070; }
+        html.light .train-svg text[fill="#94a3b8"]  { fill: #2a4a68; }
+        html.light .train-svg text[fill="#7ec8e3"]  { fill: #0a5878; }
+        html.light .train-svg text[fill="#7dd3fc"]  { fill: #0a5888; }
+        html.light .train-svg text[fill="#93c5fd"]  { fill: #0a4880; }
+        html.light .train-svg text[fill="#60a5fa"]  { fill: #0a48a0; }
+        html.light .train-svg text[fill="#38bdf8"]  { fill: #0055a0; }
+        html.light .train-svg text[fill="#34d399"]  { fill: #006840; }
+        html.light .train-svg text[fill="#a7f3d0"]  { fill: #005830; }
+        html.light .train-svg text[fill="#a78bfa"]  { fill: #4820c0; }
+        html.light .train-svg text[fill="#c4a8ff"]  { fill: #4820b0; }
+        html.light .train-svg text[fill="#a5b4fc"]  { fill: #2030a0; }
+        html.light .train-svg text[fill="#818cf8"]  { fill: #2030a0; }
+        html.light .train-svg text[fill="#a3e635"]  { fill: #3a6000; }
+        html.light .train-svg text[fill="#d9f99d"]  { fill: #3a6000; }
+        html.light .train-svg text[fill="#f87171"]  { fill: #a01010; }
+        html.light .train-svg text[fill="#fca5a5"]  { fill: #a01010; }
+        html.light .train-svg text[fill="#f97316"]  { fill: #8a3800; }
+        html.light .train-svg text[fill="#fb923c"]  { fill: #8a3800; }
+        html.light .train-svg text[fill="#fdba74"]  { fill: #7a3000; }
+        html.light .train-svg text[fill="#45505c"]  { fill: #1a2a38; }
+        html.light .train-svg text[fill="#8894a4"]  { fill: #2a3a50; }
+
+        /* ── SVG section label bars & text (light mode) ── */
+        html.light .train-svg rect[fill="#0a1e38"],
+        html.light .train-svg rect[fill="#091e38"],
+        html.light .train-svg rect[fill="#091828"] { fill: #b8d4ec; opacity: 0.9; }
+
+        html.light .train-svg text[fill="#2a6090"],
+        html.light .train-svg text[fill="#1e6090"],
+        html.light .train-svg text[fill="#1e5080"] { fill: #1a4a80; }
+
+        /* ── SVG sensor boxes (light mode) ── */
+        html.light .train-svg .sens-box,
+        html.light .train-svg rect[fill="#071e28"] { fill: #d8f0f4; }
+        html.light .train-svg rect[fill="#180f38"] { fill: #ede8fa; }   /* ECC purple */
+        html.light .train-svg rect[fill="#062f21"] { fill: #d8f4e8; }   /* SPEED green */
+        html.light .train-svg rect[fill="#180800"] { fill: #fce8e8; }   /* THRUST red */
+        html.light .train-svg rect[fill="#0a0c28"] { fill: #e8e8f8; }   /* CVIB blue-purple */
+        html.light .train-svg rect[fill="#1a0800"] { fill: #fce8e0; }   /* VLV orange */
+        html.light .train-svg rect[fill="#0f1a00"] { fill: #e8f4d8; }   /* KPH lime */
+
+        /* ── SVG bearing housings (light mode) ── */
+        html.light .train-svg .brg-housing             { fill: #c8dcf0; stroke: #4a88b8; }
+        html.light .train-svg circle[fill="#162840"]   { fill: #c8dcf0; }
+        html.light .train-svg circle[fill="#1e3858"]   { fill: #b8d0e8; }
+
+        /* ── SVG bearing number circles at bottom (light mode) ── */
+        html.light .train-svg circle[fill="#09182a"]   { fill: #b0ccE4; stroke: #3a7aaa; }
+        html.light .train-svg text[fill="#5090b8"]     { fill: #1a5880; }
+
+        /* ── SVG structural lines & shaft elements (light mode) ── */
+        html.light .train-svg rect[fill="#1a3a5c"]     { fill: #90b4cc; }
+        html.light .train-svg line[stroke="#0f2540"]   { stroke: #90b4cc; }
+
+        /* ── Monitoring/Sensor chip backgrounds (light mode) ── */
+        html.light .mp-chip,
+        html.light .st-chip { background: var(--panel2) !important; }
+
+        /* ── Chip detail illustration SVGs (light mode) ── */
+        html.light #mp-desc-svg,
+        html.light #st-desc-svg {
+            filter: invert(1) hue-rotate(180deg) saturate(0.8) brightness(1.05);
+            border-radius: 4px;
         }
 
         /* ── SVG Hover Tooltip ── */
@@ -4566,17 +4656,20 @@
                 const html = document.documentElement;
                 const isLight = html.classList.toggle('light');
                 document.getElementById('theme-label').textContent = isLight ? 'DARK' : 'LIGHT';
-                // update SVG gradient fills that are hardcoded
                 updateSVGTheme(isLight);
+                // re-render chips với đúng bg color
+                if (typeof renderMpLegend === 'function') renderMpLegend(currentLang);
+                if (typeof renderStLegend === 'function') renderStLegend(currentLang);
                 localStorage.setItem('vmas-theme', isLight ? 'light' : 'dark');
             }
 
 function updateSVGTheme(isLight) {
                 const stops = {
-                    'gHP': isLight ? ['#2a5a8c', '#1e3d64'] : ['#0e2d58', '#091c3a'],
-                    'gLP': isLight ? ['#1e4872', '#163554'] : ['#0a2848', '#081830'],
-                    'gGEN': isLight ? ['#1a5038', '#0f3224'] : ['#091c35', '#070f22'],
-                    'gShaft': isLight ? ['#6a90b8', '#4a7aaa'] : ['#6a90b8', '#2a4a68'],
+                    'gHP':    isLight ? ['#5a9fd4', '#4a8ec4', '#3a7db8'] : ['#0e2d58', '#0b2248', '#091c3a'],
+                    'gLP':    isLight ? ['#4e99d0', '#3e8bc4', '#2e7cbc'] : ['#0a2848', '#091e3a', '#081830'],
+                    'gGEN':   isLight ? ['#3a9870', '#1e7858']            : ['#091c35', '#070f22'],
+                    'gBRG':   isLight ? ['#6a90aa', '#507888']            : ['#122030', '#0a1522'],
+                    'gShaft': isLight ? ['#a8c8e0', '#7aaccc', '#5898bc'] : ['#6a90b8', '#3a6080', '#2a4a68'],
                 };
                 Object.entries(stops).forEach(([id, colors]) => {
                     const grad = document.getElementById(id);
@@ -4593,15 +4686,18 @@ function updateSVGTheme(isLight) {
                 });
             }
 
-            // Restore saved theme
+            // Mặc định light mode; chỉ dark nếu user đã chọn dark trước đó
             (function () {
                 const saved = localStorage.getItem('vmas-theme');
-                if (saved === 'light') {
+                const isLight = saved !== 'dark';
+                if (isLight) {
                     document.documentElement.classList.add('light');
                     document.addEventListener('DOMContentLoaded', () => {
                         const lbl = document.getElementById('theme-label');
                         if (lbl) lbl.textContent = 'DARK';
                         updateSVGTheme(true);
+                        if (typeof renderMpLegend === 'function') renderMpLegend(currentLang);
+                        if (typeof renderStLegend === 'function') renderStLegend(currentLang);
                     });
                 }
             })();
@@ -5051,12 +5147,13 @@ function updateSVGTheme(isLight) {
             function renderMpLegend(lang) {
                 const chips = document.getElementById('mp-chips');
                 if (!chips) return;
+                const _lt = document.documentElement.classList.contains('light');
                 chips.innerHTML = mpData.map(p => `
                     <div class="mp-chip" data-mp="${p.id}" style="
                         display:inline-flex;align-items:center;gap:5px;cursor:pointer;
                         padding:4px 9px;border-radius:3px;user-select:none;
                         border:1.5px solid ${selectedMp === p.id ? '#38bdf8' : p.color};
-                        background:${selectedMp === p.id ? '#071828' : p.bg};
+                        background:${selectedMp === p.id ? (_lt ? '#dbeafe' : '#071828') : (_lt ? 'var(--panel2)' : p.bg)};
                         font-family:'Share Tech Mono',monospace;
                     ">
                         <span style="font-size:8px;font-weight:700;color:${p.text};border-right:1px solid ${p.color};padding-right:5px;">${p.abbr}</span>
@@ -5187,12 +5284,13 @@ function updateSVGTheme(isLight) {
             function renderStLegend(lang) {
                 const chips = document.getElementById('st-chips');
                 if (!chips) return;
+                const _lt2 = document.documentElement.classList.contains('light');
                 chips.innerHTML = stData.map(p => `
                     <div class="mp-chip" data-st="${p.id}" style="
                         display:inline-flex;align-items:center;gap:5px;cursor:pointer;
                         padding:4px 9px;border-radius:3px;user-select:none;
                         border:1.5px solid ${selectedSt === p.id ? '#38bdf8' : p.color};
-                        background:${selectedSt === p.id ? '#071828' : p.bg};
+                        background:${selectedSt === p.id ? (_lt2 ? '#dbeafe' : '#071828') : (_lt2 ? 'var(--panel2)' : p.bg)};
                         font-family:'Share Tech Mono',monospace;
                     ">
                         <span style="font-size:8px;font-weight:700;color:${p.text};border-right:1px solid ${p.color};padding-right:5px;">${p.abbr}</span>

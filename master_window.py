@@ -8,6 +8,7 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from project1_main import MainWindow
 from ML_TAB.windows.ML_tab import ML_Tab
 from Monitoring.windows.monitoring_tab import Monitoring_Tab
+from CAT3.catt3_gui import SteamTab
 from help_dialog import HelpDialog
 
 """pyinstaller --onedir --name master_window --icon DFA.ico --exclude-module tkinter --exclude-module PyQt5 --exclude-module torch --add-data "ML_TAB\assets;ML_TAB\assets" master_window.py
@@ -395,6 +396,9 @@ class MasterWindow(QMainWindow):
         )
         monitoring_widget = monitoring_win.centralWidget()
         self.tab_widget.addTab(monitoring_widget, "📡 Monitoring System")
+
+        # Tab 4: CAT3 thermodynamic calculator
+        self.tab_widget.addTab(SteamTab(), "💧 Cat3")
 
         # Phím F1 mở hướng dẫn sử dụng
         QShortcut(QKeySequence("F1"), self, activated=self._open_help)

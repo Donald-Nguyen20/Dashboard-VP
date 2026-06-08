@@ -361,7 +361,29 @@ QPushButton:pressed {
             "AH SOOTBLOWER HOT SIDE RETRACTED",
             "AH SOOTBLOWER COLD SIDE RETRACTED",
         ],
-        "U2-Main_Turbine": [],
+        "GAH_monitoring_U1": [
+            "ECO O/L FG TEMP",                         # T_gas_in
+            "AH O/L FG TEMP",                          # T_gas_out
+            "AH O/L SECAIR TEMP",                      # T_sa_out
+            "AH O/L PA TEMP",                          # T_pa_out
+            "AH I/L SECAIR TEMP",                      # T_air_in
+            "ECO O/L FG ANALR 1 PRB O2 DNSTY 1 VLU",  # O2_eco_avg (avg 4 probe — tính ở _inject)
+            "ECO O/L FG ANALR 2 PRB O2 DNSTY 1 VLU",  # O2_stack (analyzer 2 phía sau GAH)
+            "AH O/L FG PRS",                           # P_gas_out
+            "ECO O/L FG PRS",                          # P_eco_out
+            "AH SPT BRG TEMP",                         # T_cold_end
+            "AH GDBRG TEMP",                           # T_gd_brg
+            "AH RTDRV CURR",                           # I_motor
+            "NET MW",                                  # gen_mw
+        ],
+        "U2-Main_Turbine": [
+            "NET MW", "MAIN STEAM PRESS", "MAIN STEAM TEMP", 
+            "HOT REHEAT PRESS", "HOT REHEAT TEMP",
+            "LP EXHAUST TEMP", "CONDENSER VACUUM", 
+            "TURBINE SPEED", "BRG 1 VIB", "BRG 2 VIB",
+            "BRG 3 VIB", "BRG 4 VIB", "LUBE OIL TEMP",
+            "THRUST BRG TEMP", "MSV POS", "GV 1 POS"
+        ],
     }
 
     def open_folder(self, folder_name):
@@ -428,21 +450,55 @@ QPushButton:pressed {
         if not cols:
             return
 
+        def _val(v):
+            """Chuyển giá trị sang float hoặc None — KHÔNG dùng 0 thay thế."""
+            try:
+                f = float(v)
+                return None if math.isnan(f) or math.isinf(f) else round(f, 3)
+            except (TypeError, ValueError):
+                return None
+
+        # Tính O2_eco_avg từ 4 probe nếu folder là GAH_monitoring_U1
+        O2_PROBES = [
+            "ECO O/L FG ANALR 1 PRB O2 DNSTY 1 VLU",
+            "ECO O/L FG ANALR 1 PRB O2 DNSTY 2 VLU",
+            "ECO O/L FG ANALR 2 PRB O2 DNSTY 1 VLU",
+            "ECO O/L FG ANALR 2 PRB O2 DNSTY 2 VLU",
+        ]
+        compute_o2_avg = (folder_name == "GAH_monitoring_U1")
+
         rows = []
         for _, row in df.iterrows():
-            dt_str = str(row["Datetime"])[:19]  # "YYYY-MM-DD HH:MM:SS"
+            dt_str = str(row.get("Datetime", ""))[:19]
             r = [dt_str]
             for col in cols:
-                val = row.get(col, 0)
-                try:
-                    v = float(val)
-                    r.append(0 if math.isnan(v) else round(v, 3))
-                except (TypeError, ValueError):
-                    r.append(0)
+                if compute_o2_avg and col == "ECO O/L FG ANALR 1 PRB O2 DNSTY 1 VLU":
+                    # Tính trung bình 4 probe O2 thay vì chỉ dùng 1
+                    probe_vals = [_val(row.get(p)) for p in O2_PROBES]
+                    valid = [v for v in probe_vals if v is not None]
+                    r.append(round(sum(valid) / len(valid), 3) if valid else None)
+                else:
+                    r.append(_val(row.get(col)))
             rows.append(r)
 
         data_json = json.dumps(rows)
-        js = f"if(typeof onDataReady==='function') onDataReady({data_json});"
+        js = f"""
+        (function(){{
+            const rows = {data_json};
+            if (typeof onDataReady === 'function') {{
+                onDataReady(rows);
+                return;
+            }}
+            window.D = rows;
+            if (typeof loadData === 'function') {{
+                loadData();
+            }} else {{
+                if (typeof updD === 'function') updD();
+                if (typeof drawDev === 'function') drawDev();
+                if (typeof drawAllCharts === 'function') drawAllCharts();
+            }}
+        }})();
+        """
         self.monitoring_web_view.page().runJavaScript(js)
 
     def add_tabs(self):
@@ -482,4 +538,3 @@ QPushButton:pressed {
         # Tab 5 - Analysis Report
         self.analysis_report_tab = AnalysisReportTab(parent=self)
         self.tab_widget.addTab(self.analysis_report_tab, "📊 Analysis Report")
-
