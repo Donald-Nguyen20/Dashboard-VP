@@ -236,7 +236,7 @@ const NOSE_APEX_X = FX_R - 4.5;   // 6.042 - 4.5 = 1.542
 const NOSE_MID_Y  = (Y_NOSE_T + Y_NOSE_B) / 2;
 
 // HRA: gap ~1500mm from furnace right wall, width 12200mm
-const HRA_OFX = FL(8000);          // +8000mm offset in +x
+const HRA_OFX = FL(4000);          // +8000mm offset in +x
 const HRA_XL = FX_R + 1.5 + HRA_OFX;  // 6.042 + 1.5 + 3.0 = 10.542
 const HRA_XR = HRA_XL + 12.2;     // 7.542 + 12.2 = 19.742
 const HRA_CX = (HRA_XL + HRA_XR) / 2;
@@ -803,21 +803,21 @@ const list = document.getElementById('tc-list');
 // ── TC SENSORS — FURNACE VESTIBULE SIDE WALL ─────────────────
 const VEST_TC_DATA = [
   { kks: '10HAD26CT001', wall: 'Furnace Vestibule Front/Right Wall', tube: 27, noWallSuffix: true,
-    x: FX_R + FL(2000), y: Y_TOP - FL(2000), z: FZ_F },
+    x: FX_R + FL(4000), y: Y_TOP - FL(2000), z: FZ_F },
   { kks: '10HAH15CT001', wall: 'Furnace Vestibule Rear/Right Wall', tube: 15, noWallSuffix: true,
-    x: FX_R + FL(5000), y: Y_TOP - FL(2000), z: FZ_F },
-  { kks: '10HAH17CT001', wall: 'HRA Front/Right Wall', tube: 24, noWallSuffix: true,
     x: FX_R + FL(8000), y: Y_TOP - FL(2000), z: FZ_F },
-  { kks: '10HAH17CT002', wall: 'HRA Rear/Right Wall', tube: 26, noWallSuffix: true,
+  { kks: '10HAH17CT001', wall: 'HRA Front/Right Wall', tube: 24, noWallSuffix: true,
     x: FX_R + FL(11000), y: Y_TOP - FL(2000), z: FZ_F },
+  { kks: '10HAH17CT002', wall: 'HRA Rear/Right Wall', tube: 26, noWallSuffix: true,
+    x: FX_R + FL(14000), y: Y_TOP - FL(2000), z: FZ_F },
   { kks: '10HAD27CT001', wall: 'Furnace Vestibule Rear/Left Wall', tube: 27, noWallSuffix: true,
-    x: FX_R + FL(2000), y: Y_TOP - FL(2000), z: FZ_R },
+    x: FX_R + FL(4000), y: Y_TOP - FL(2000), z: FZ_R },
   { kks: '10HAH16CT001', wall: 'Furnace Vestibule Rear/Left Wall', tube: 15, noWallSuffix: true,
-    x: FX_R + FL(5000), y: Y_TOP - FL(2000), z: FZ_R },
-  { kks: '10HAH18CT001', wall: 'HRA Front/Left Wall', tube: 24, noWallSuffix: true,
     x: FX_R + FL(8000), y: Y_TOP - FL(2000), z: FZ_R },
-  { kks: '10HAH18CT002', wall: 'HRA Rear/Left Wall', tube: 26, noWallSuffix: true,
+  { kks: '10HAH18CT001', wall: 'HRA Front/Left Wall', tube: 24, noWallSuffix: true,
     x: FX_R + FL(11000), y: Y_TOP - FL(2000), z: FZ_R },
+  { kks: '10HAH18CT002', wall: 'HRA Rear/Left Wall', tube: 26, noWallSuffix: true,
+    x: FX_R + FL(14000), y: Y_TOP - FL(2000), z: FZ_R },
 ];
 window.VEST_TC_DATA_REF = VEST_TC_DATA;
 
@@ -830,6 +830,81 @@ window.VEST_TC_DATA_REF = VEST_TC_DATA;
     mesh.userData = { kks: tc.kks, wall: tc.wall, tube: tc.tube, noWallSuffix: true, idx: tcMeshes.length };
     tcGroup.add(mesh);
     tcMeshes.push(mesh);
+  });
+}
+
+// ── TUBE QUA HAD26CT001 (song song trục X) ───────────────────
+{
+  const HDR_X   = FX_R + FL(3000);
+  const HDR_Y   = Y_TOP - FL(2000);
+  const HDR_LEN = FL(6000);
+  const SMALL_R = FL(20);
+  const SMALL_H = FL(3000);
+
+  const hdrGeo  = new THREE.CylinderGeometry(FL(80), FL(80), HDR_LEN, 16);
+  const tubeMat = new THREE.MeshPhongMaterial({ color: 0x888888, shininess: 60 });
+  const tubeMesh = new THREE.Mesh(hdrGeo, tubeMat);
+  tubeMesh.rotation.z = Math.PI / 2;
+  tubeMesh.position.set(HDR_X, HDR_Y, FZ_F);
+  tubeMesh.name = 'Vestibule Front/Right';
+  scene.add(tubeMesh);
+
+  const smallGeo = new THREE.CylinderGeometry(SMALL_R, SMALL_R, SMALL_H, 8);
+  const smallMat = new THREE.MeshPhongMaterial({ color: 0x999999, shininess: 40 });
+  evenSpread(57, HDR_X - HDR_LEN/2, HDR_X + HDR_LEN/2).forEach(tx => {
+    const sm = new THREE.Mesh(smallGeo, smallMat);
+    sm.position.set(tx, HDR_Y - SMALL_H/2, FZ_F);
+    scene.add(sm);
+  });
+}
+
+// ── TUBE QUA HAH15CT001 (song song trục X) ───────────────────
+{
+  const HDR_X   = FX_R + FL(8000);
+  const HDR_Y   = Y_TOP - FL(2000);
+  const HDR_LEN = FL(3500);
+  const SMALL_R = FL(20);
+  const SMALL_H = FL(3000);
+
+  const hdrGeo  = new THREE.CylinderGeometry(FL(80), FL(80), HDR_LEN, 16);
+  const tubeMat = new THREE.MeshPhongMaterial({ color: 0x888888, shininess: 60 });
+  const tubeMesh = new THREE.Mesh(hdrGeo, tubeMat);
+  tubeMesh.rotation.z = Math.PI / 2;
+  tubeMesh.position.set(HDR_X, HDR_Y, FZ_F);
+  tubeMesh.name = 'Vestibule Rear/Right';
+  scene.add(tubeMesh);
+
+  const smallGeo = new THREE.CylinderGeometry(SMALL_R, SMALL_R, SMALL_H, 8);
+  const smallMat = new THREE.MeshPhongMaterial({ color: 0x999999, shininess: 40 });
+  evenSpread(26, HDR_X - HDR_LEN/2, HDR_X + HDR_LEN/2).forEach(tx => {
+    const sm = new THREE.Mesh(smallGeo, smallMat);
+    sm.position.set(tx, HDR_Y - SMALL_H/2, FZ_F);
+    scene.add(sm);
+  });
+}
+
+// ── TUBE QUA HAH17CT001 (song song trục X) ───────────────────
+{
+  const HDR_X   = FX_R + FL(11000);
+  const HDR_Y   = Y_TOP - FL(2000);
+  const HDR_LEN = FL(3500);
+  const SMALL_R = FL(20);
+  const SMALL_H = FL(3000);
+
+  const hdrGeo  = new THREE.CylinderGeometry(FL(80), FL(80), HDR_LEN, 16);
+  const tubeMat = new THREE.MeshPhongMaterial({ color: 0x888888, shininess: 60 });
+  const tubeMesh = new THREE.Mesh(hdrGeo, tubeMat);
+  tubeMesh.rotation.z = Math.PI / 2;
+  tubeMesh.position.set(HDR_X, HDR_Y, FZ_F);
+  tubeMesh.name = 'HRA Right';
+  scene.add(tubeMesh);
+
+  const smallGeo = new THREE.CylinderGeometry(SMALL_R, SMALL_R, SMALL_H, 8);
+  const smallMat = new THREE.MeshPhongMaterial({ color: 0x999999, shininess: 40 });
+  evenSpread(48, HDR_X - HDR_LEN/2, HDR_X + HDR_LEN/2).forEach(tx => {
+    const sm = new THREE.Mesh(smallGeo, smallMat);
+    sm.position.set(tx, HDR_Y - SMALL_H/2, FZ_F);
+    scene.add(sm);
   });
 }
 
