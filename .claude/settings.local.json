@@ -6,7 +6,10 @@
       "Bash(\"e:\\\\book\\\\Vanphong\\\\Dashboard\\\\Dashboard V4\\\\project1_main_tab\\\\Forecasting_modules\\\\__init__.py\")",
       "Bash(python -c \"from project1_main_tab.Forecasting_modules.forecasting_tab import ForecastingTab; print\\(''OK''\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\(''project1_main_tab/Forecasting_modules/forecasting_tab.py''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")",
-      "Bash(python -c \"import ast; ast.parse\\(open\\(''project1_main_tab/Forecasting_modules/forecasting_tab.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''project1_main_tab/Forecasting_modules/forecasting_tab.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")",
+      "PowerShell(\\(Get-Item \"d:\\\\3. Coding\\\\Dashboard-VP\\\\Systems\\\\BOILER_METAL_ARRANGEMENT.html\"\\).Length)",
+      "Bash(git stash *)",
+      "Bash(git checkout *)"
     ]
   }
 }
