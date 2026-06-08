@@ -385,23 +385,6 @@ const HOP_CY = (Y_HOP_TIP + Y_FL44) / 2;
   addBox(HRA_W, wkTk, FD, matHR, HRA_CX, Y_FL44, 0, hraWallArr);
 }
 
-// HRA heat exchanger tube banks (4 banks)
-const banks = [
-  { y: HRA_CY + HRA_H*0.36, h: FL(5500), col: 0xCC44AA, rows: 5 },  // Pri.SH
-  { y: HRA_CY + HRA_H*0.12, h: FL(4500), col: 0x66BB22, rows: 4 },  // RH
-  { y: HRA_CY - HRA_H*0.12, h: FL(4000), col: 0xE070A0, rows: 4 },  // Sec.ECO
-  { y: HRA_CY - HRA_H*0.36, h: FL(5000), col: 0x33AA44, rows: 5 },  // Pri.ECO
-];
-banks.forEach(b => {
-  for (let t = 0; t < b.rows; t++) {
-    const sm = new THREE.Mesh(
-      new THREE.BoxGeometry(HRA_W * 0.80, FL(180), FL(350)),
-      mkMat(b.col, 0.65)
-    );
-    sm.position.set(HRA_CX, b.y - b.h/2 + t*(b.h/(b.rows-1)), -FD*0.28 + t*FL(650));
-    scene.add(sm);
-  }
-});
 
 // ── FURNACE INTERMEDIATE HEADERS (FL+53100) ──────────────────
 // 4 headers: left, right, front, rear — tại FL+53100
@@ -831,6 +814,20 @@ window.VEST_TC_DATA_REF = VEST_TC_DATA;
     tcGroup.add(mesh);
     tcMeshes.push(mesh);
   });
+}
+
+// ── REHEATER — song song trục Z, giữa HAD27 và HAH16 ─────────
+{
+  const RH_X = FX_R + FL(4500);
+  const RH_Y = Y_TOP - FL(2000);
+
+  const geo  = new THREE.CylinderGeometry(FL(200), FL(200), FD, 16);
+  const mat  = new THREE.MeshPhongMaterial({ color: 0xCC6600, shininess: 70 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = Math.PI / 2;
+  mesh.position.set(RH_X, RH_Y, 0);
+  mesh.name = 'Reheater';
+  scene.add(mesh);
 }
 
 // ── TUBE QUA HAD26CT001 (song song trục X) ───────────────────
