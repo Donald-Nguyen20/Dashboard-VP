@@ -820,7 +820,7 @@ window.VEST_TC_DATA_REF = VEST_TC_DATA;
 // ── REHEATER — song song trục Z, giữa HAD27 và HAH16 ─────────
 const RH_PANEL_PARAMS = { zPositions: [], x: 0, y: 0 };
 {
-  const RH_X = FX_R + FL(4500);
+  const RH_X = FX_R + FL(2500);
   const RH_Y = Y_TOP - FL(2000);
 
   RH_PANEL_PARAMS.x = RH_X;
@@ -843,6 +843,36 @@ const RH_PANEL_PARAMS = { zPositions: [], x: 0, y: 0 };
     RH_PANEL_PARAMS.zPositions.push(tz);
     const sm = new THREE.Mesh(smallGeo, smallMat);
     sm.position.set(RH_X, RH_Y - SMALL_H / 2, tz);
+    scene.add(sm);
+  });
+}
+
+// ── HRA FRONT WALL — song song trục Z, gần HAH15 ─────────────
+const HFW_PANEL_PARAMS = { zPositions: [], x: 0, y: 0 };
+{
+  const HFW_X = FX_R + FL(5600);
+  const HFW_Y = Y_TOP - FL(2000);
+
+  HFW_PANEL_PARAMS.x = HFW_X;
+  HFW_PANEL_PARAMS.y = HFW_Y;
+
+  const geo  = new THREE.CylinderGeometry(FL(200), FL(200), FD, 16);
+  const mat  = new THREE.MeshPhongMaterial({ color: 0xCC6600, shininess: 70 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = Math.PI / 2;
+  mesh.position.set(HFW_X, HFW_Y, 0);
+  mesh.name = 'HRA Front Wall';
+  scene.add(mesh);
+
+  // 75 ống nhỏ song song trục Y, #1(left/FZ_R,idx0)→#75(right/FZ_F,idx74)
+  const SMALL_R = FL(25);
+  const SMALL_H = FL(3000);
+  const smallGeo = new THREE.CylinderGeometry(SMALL_R, SMALL_R, SMALL_H, 8);
+  const smallMat = new THREE.MeshPhongMaterial({ color: 0xDD8822, shininess: 40 });
+  evenSpread(75, -FD / 2, FD / 2).forEach(tz => {
+    HFW_PANEL_PARAMS.zPositions.push(tz);
+    const sm = new THREE.Mesh(smallGeo, smallMat);
+    sm.position.set(HFW_X, HFW_Y - SMALL_H / 2, tz);
     scene.add(sm);
   });
 }
@@ -1216,7 +1246,7 @@ const RH_TC_MAP = [
 ];
 const RH_TC_DATA = RH_TC_MAP.map(m => ({
   kks:  '10HAJ10CT' + m.ct,
-  wall: 'RH P' + m.pNum,
+  wall: 'RH P' + m.pNum + ' #12',
   x: RH_PANEL_PARAMS.x,
   y: RH_PANEL_PARAMS.y - FL(400),
   z: RH_PANEL_PARAMS.zPositions[m.pIdx],
@@ -1246,6 +1276,46 @@ window.RH_TC_DATA_REF = RH_TC_DATA;
   });
 }
 
+// ── HRA FRONT WALL TC SENSORS (10HAH14CT001~004) ─────────────
+// #1~#75: left(FZ_R,idx0)→right(FZ_F,idx74); TC từ right→left
+const HFW_TC_MAP = [
+  { ct: '001', tubeNum: 65, pIdx: 64 },
+  { ct: '002', tubeNum: 47, pIdx: 46 },
+  { ct: '003', tubeNum: 28, pIdx: 27 },
+  { ct: '004', tubeNum: 10, pIdx:  9 },
+];
+const HFW_TC_DATA = HFW_TC_MAP.map(m => ({
+  kks:  '10HAH14CT' + m.ct,
+  wall: 'HRA FW #' + m.tubeNum,
+  x: HFW_PANEL_PARAMS.x,
+  y: HFW_PANEL_PARAMS.y - FL(200),
+  z: HFW_PANEL_PARAMS.zPositions[m.pIdx],
+}));
+window.HFW_TC_DATA_REF = HFW_TC_DATA;
+
+{
+  const matHFW = new THREE.MeshPhongMaterial({ color: 0x2266DD, emissive: 0x1144AA, emissiveIntensity: 0.4 });
+  const DOT    = FL(180);
+
+  HFW_TC_DATA.forEach(tc => {
+    const geo  = new THREE.SphereGeometry(DOT, 10, 8);
+    const mesh = new THREE.Mesh(geo, matHFW.clone());
+    mesh.position.set(tc.x, tc.y, tc.z);
+    mesh.userData = { kks: tc.kks, wall: tc.wall, noWallSuffix: true, idx: tcMeshes.length };
+    tcGroup.add(mesh);
+    tcMeshes.push(mesh);
+
+    const linePts = [
+      new THREE.Vector3(tc.x, tc.y - DOT, tc.z),
+      new THREE.Vector3(tc.x, tc.y - FL(400), tc.z),
+    ];
+    tcGroup.add(new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(linePts),
+      new THREE.LineBasicMaterial({ color: 0x2266DD, opacity: 0.7, transparent: true })
+    ));
+  });
+}
+
 // Reheater TC separator
 { const s = document.createElement('div');
   s.style.cssText = 'padding:5px 12px;font-size:9px;font-family:var(--mono);color:var(--txt3);background:var(--bg);border-bottom:1px solid var(--bdr);letter-spacing:.08em;text-transform:uppercase';
@@ -1255,6 +1325,23 @@ window.RH_TC_DATA_REF = RH_TC_DATA;
 
 { const baseIdx = TC_DATA.length + window.UP_TC_DATA_REF.length + window.VEST_TC_DATA_REF.length + window.SSH_TC_DATA_REF.length + window.FSH_TC_DATA_REF.length;
   window.RH_TC_DATA_REF.forEach((tc, i) => {
+    const el = document.createElement('div');
+    el.className = 'tc-item';
+    el.innerHTML = '<span class="tc-dot"></span><span class="tc-kks">' + tc.kks + '</span><span class="tc-wall">' + tc.wall + '</span>';
+    el.addEventListener('click', () => selectTC(baseIdx + i));
+    list.appendChild(el);
+  });
+}
+
+// HRA Front Wall TC separator
+{ const s = document.createElement('div');
+  s.style.cssText = 'padding:5px 12px;font-size:9px;font-family:var(--mono);color:var(--txt3);background:var(--bg);border-bottom:1px solid var(--bdr);letter-spacing:.08em;text-transform:uppercase';
+  s.textContent = 'HRA Front Wall TC · HAH14';
+  list.appendChild(s);
+}
+
+{ const baseIdx = TC_DATA.length + window.UP_TC_DATA_REF.length + window.VEST_TC_DATA_REF.length + window.SSH_TC_DATA_REF.length + window.FSH_TC_DATA_REF.length + window.RH_TC_DATA_REF.length;
+  window.HFW_TC_DATA_REF.forEach((tc, i) => {
     const el = document.createElement('div');
     el.className = 'tc-item';
     el.innerHTML = '<span class="tc-dot"></span><span class="tc-kks">' + tc.kks + '</span><span class="tc-wall">' + tc.wall + '</span>';
