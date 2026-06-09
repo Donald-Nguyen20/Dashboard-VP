@@ -107,7 +107,7 @@ const FL = mm => mm / 1000;
 // theta: horizontal rotation, phi: vertical angle (0=top, PI/2=side)
 // Allow phi from near-top to near-bottom: 0.05 to PI-0.05
 const sph = { theta: 0.68, phi: 1.05, r: 75 };
-let isDrag = false, pm = { x:0, y:0 }, autoRot = false;
+let isDrag = false, isPan = false, pm = { x:0, y:0 }, autoRot = false;
 
 // Target = center of boiler model
 const tgt = new THREE.Vector3(3, FL(50000), 0);
@@ -124,15 +124,32 @@ function updCam() {
 updCam();
 
 const cv = document.getElementById('c');
-cv.addEventListener('mousedown', e => { isDrag = true; pm = { x:e.clientX, y:e.clientY }; });
-window.addEventListener('mouseup', () => { isDrag = false; });
-window.addEventListener('mousemove', e => {
-  if (!isDrag) return;
-  sph.theta -= (e.clientX - pm.x) * 0.005;
-  // Full vertical range: 0.05 (near top) to PI-0.05 (near bottom)
-  sph.phi = Math.max(0.05, Math.min(Math.PI - 0.05, sph.phi + (e.clientY - pm.y) * 0.005));
+cv.addEventListener('contextmenu', e => e.preventDefault());
+cv.addEventListener('mousedown', e => {
   pm = { x:e.clientX, y:e.clientY };
-  updCam();
+  if (e.button === 2) isPan = true;
+  else isDrag = true;
+});
+window.addEventListener('mouseup', () => { isDrag = false; isPan = false; });
+window.addEventListener('mousemove', e => {
+  const dx = e.clientX - pm.x;
+  const dy = e.clientY - pm.y;
+  pm = { x:e.clientX, y:e.clientY };
+  if (isDrag) {
+    sph.theta -= dx * 0.005;
+    sph.phi = Math.max(0.05, Math.min(Math.PI - 0.05, sph.phi + dy * 0.005));
+    updCam();
+  } else if (isPan) {
+    // Pan: dịch tgt theo trục right/up của camera
+    const forward = new THREE.Vector3().subVectors(tgt, camera.position).normalize();
+    const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+    const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+    const speed = sph.r * 0.001;
+    tgt.addScaledVector(right, -dx * speed);
+    tgt.addScaledVector(up,  dy * speed);
+    tgtTarget.copy(tgt);
+    updCam();
+  }
 });
 cv.addEventListener('wheel', e => {
   sph.r = Math.max(8, Math.min(150, sph.r + e.deltaY * 0.05));
@@ -552,30 +569,6 @@ const dtMesh = new THREE.Mesh(
 dtMesh.position.set(FX_L + FL(500), Y_TOP + FL(1500), FL(2000));
 scene.add(dtMesh);
 
-// FSH outlet header
-const fshH = new THREE.Mesh(
-  new THREE.CylinderGeometry(FL(650), FL(650), FD * 0.85, 24),
-  mkMat(0xDD3A18, 0.80)
-);
-fshH.rotation.x = Math.PI / 2;
-fshH.position.set(FL(1500), Y_TOP + FL(1400), 0);
-scene.add(fshH);
-const fshHEdge = new THREE.LineSegments(
-  new THREE.EdgesGeometry(new THREE.CylinderGeometry(FL(650), FL(650), FD*0.85, 24)),
-  new THREE.LineBasicMaterial({ color: 0xAA2800 })
-);
-fshHEdge.rotation.x = Math.PI / 2;
-fshHEdge.position.set(FL(1500), Y_TOP + FL(1400), 0);
-scene.add(fshHEdge);
-
-// RH outlet header
-const rhH = new THREE.Mesh(
-  new THREE.CylinderGeometry(FL(650), FL(650), FD * 0.85, 24),
-  mkMat(0x2050CC, 0.80)
-);
-rhH.rotation.x = Math.PI / 2;
-rhH.position.set(HRA_CX, Y_TOP + FL(1400), 0);
-scene.add(rhH);
 
 // ── TC SENSORS — FURNACE LOWER WALL (on intermediate header FL+53100) ──
 // Positions from D-D drawing
@@ -836,7 +829,7 @@ const RH_PANEL_PARAMS = { zPositions: [], x: 0, y: 0 };
 
   // 75 ống nhỏ vuông góc trục Y, P1(left/FZ_R,idx0)→P75(right/FZ_F,idx74)
   const SMALL_R = FL(25);
-  const SMALL_H = FL(3000);
+  const SMALL_H = FL(4500);
   const smallGeo = new THREE.CylinderGeometry(SMALL_R, SMALL_R, SMALL_H, 8);
   const smallMat = new THREE.MeshPhongMaterial({ color: 0xDD8822, shininess: 40 });
   evenSpread(75, -FD / 2, FD / 2).forEach(tz => {
@@ -1311,6 +1304,12 @@ const RH_TC_DATA = RH_TC_MAP.map(m => ({
   y: RH_PANEL_PARAMS.y - FL(400),
   z: RH_PANEL_PARAMS.zPositions[m.pIdx],
 }));
+// CT051 (right header) và CT052 (left header) trên ống góp chính
+const RH_HDR_TC = [
+  { kks: '10HAJ10CT051', wall: 'RH Header Right', x: RH_PANEL_PARAMS.x, y: RH_PANEL_PARAMS.y, z:  FZ_F },
+  { kks: '10HAJ10CT052', wall: 'RH Header Left',  x: RH_PANEL_PARAMS.x, y: RH_PANEL_PARAMS.y, z:  FZ_R },
+];
+RH_HDR_TC.forEach(tc => RH_TC_DATA.push(tc));
 window.RH_TC_DATA_REF = RH_TC_DATA;
 
 {
@@ -1479,7 +1478,7 @@ const HRW_TC_DATA = HRW_TC_MAP.map(m => ({
   kks:  '10HAH12CT' + m.ct,
   wall: 'HRA RW #' + m.tubeNum,
   x: HRW_PANEL_PARAMS.x,
-  y: HRW_PANEL_PARAMS.y - FL(200),
+  y: HRW_PANEL_PARAMS.y - FL(700),
   z: HRW_PANEL_PARAMS.zPositions[m.pIdx],
 }));
 window.HRW_TC_DATA_REF = HRW_TC_DATA;
@@ -1532,25 +1531,21 @@ scene.add(new THREE.GridHelper(120, 60, 0xCCCABE, 0xDDDDD0));
   const axisLen = 15;
   const axisW   = 3;
 
-  // X axis — đỏ (Front→Rear)
   const xGeo = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(0,0,0), new THREE.Vector3(axisLen,0,0)
   ]);
   scene.add(new THREE.Line(xGeo, new THREE.LineBasicMaterial({color:0xFF2020, linewidth:axisW})));
 
-  // Z axis — xanh lá (Left→Right)
   const zGeo = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,axisLen)
   ]);
   scene.add(new THREE.Line(zGeo, new THREE.LineBasicMaterial({color:0x20CC20, linewidth:axisW})));
 
-  // Y axis — xanh dương (lên trên)
   const yGeo = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(0,0,0), new THREE.Vector3(0,axisLen,0)
   ]);
   scene.add(new THREE.Line(yGeo, new THREE.LineBasicMaterial({color:0x2060FF, linewidth:axisW})));
 
-  // Mũi tên đầu trục X
   const xArr = new THREE.Mesh(
     new THREE.ConeGeometry(0.3, 1.0, 8),
     new THREE.MeshBasicMaterial({color:0xFF2020})
@@ -1559,7 +1554,6 @@ scene.add(new THREE.GridHelper(120, 60, 0xCCCABE, 0xDDDDD0));
   xArr.position.set(axisLen + 0.5, 0, 0);
   scene.add(xArr);
 
-  // Mũi tên đầu trục Z
   const zArr = new THREE.Mesh(
     new THREE.ConeGeometry(0.3, 1.0, 8),
     new THREE.MeshBasicMaterial({color:0x20CC20})
@@ -1568,7 +1562,6 @@ scene.add(new THREE.GridHelper(120, 60, 0xCCCABE, 0xDDDDD0));
   zArr.position.set(0, 0, axisLen + 0.5);
   scene.add(zArr);
 
-  // Mũi tên đầu trục Y
   const yArr = new THREE.Mesh(
     new THREE.ConeGeometry(0.3, 1.0, 8),
     new THREE.MeshBasicMaterial({color:0x2060FF})
@@ -1576,14 +1569,12 @@ scene.add(new THREE.GridHelper(120, 60, 0xCCCABE, 0xDDDDD0));
   yArr.position.set(0, axisLen + 0.5, 0);
   scene.add(yArr);
 
-  // Điểm gốc O
   const origin = new THREE.Mesh(
     new THREE.SphereGeometry(0.4, 12, 8),
     new THREE.MeshBasicMaterial({color:0xFFFFFF})
   );
   scene.add(origin);
 
-  // Labels X Y Z
   function axisLabel(txt, col, pos) {
     const c2 = document.createElement('canvas');
     c2.width = 64; c2.height = 64;
